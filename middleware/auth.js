@@ -16,7 +16,7 @@ const ALLOWED_EMAILS = process.env.ALLOWED_EMAILS
   ? process.env.ALLOWED_EMAILS.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
   : [];
 
-const JWKS_URL = `https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`;
+const JWKS_URL = `https://login.microsoftonline.com/common/discovery/v2.0/keys`;
 
 // Cache token → { user, exp } pour éviter un appel Graph à chaque requête
 const _tokenCache = new Map();
