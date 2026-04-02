@@ -14,7 +14,8 @@
   "dependencies": {
     "@google-cloud/storage": "^7.13.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "cross-env": "^10.1.0"
