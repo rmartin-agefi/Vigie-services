@@ -8,15 +8,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "cross-env AUTH_REQUIRED=false node --env-file=.env --watch server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.13.0",
     "cors": "^2.8.5",
     "express": "^4.19.2"
-  },
-  "devDependencies": {
-    "cross-env": "^10.1.0"
   }
 }
