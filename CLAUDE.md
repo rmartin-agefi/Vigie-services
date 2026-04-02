@@ -28,7 +28,7 @@ gcloud builds submit --config infra/cloudbuild.yaml \
 influence-services/
 ├── server.js              ← Point d'entrée. Auto-charge routes/*/handler.js
 ├── middleware/
-│   └── auth.js            ← Azure AD JWT (TODO #7). Bypass si AUTH_REQUIRED=false
+│   └── auth.js            ← Azure AD JWT (JWKS + Graph fallback, cache 5min). Bypass si AUTH_REQUIRED=false
 ├── lib/
 │   └── gcs.js             ← Cache GCS 5 min : getPrompt(key), getData(key), refreshAll()
 ├── infra/
@@ -61,7 +61,7 @@ Les data JSON dans `gs://<GCS_BUCKET>/influence-services/data/<key>.json`.
 ## Auth
 
 - En dev : `AUTH_REQUIRED=false` dans `.env` (ou `npm run dev` le fait automatiquement)
-- En prod : validation JWT Azure AD — TODO #7
+- En prod : validation JWT Azure AD via JWKS Microsoft (tenant `2e1f24be-...`), fallback Graph /me, cache 5min
 - `POST /admin/refresh` protégé par `x-admin-token` header
 
 ## Variables d'environnement
