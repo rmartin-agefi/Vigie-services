@@ -18,11 +18,20 @@ const ALLOWED_EMAILS = process.env.ALLOWED_EMAILS
 
 const JWKS_URL = `https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`;
 
+// Cache token → { user, exp } pour éviter un appel Graph à chaque requête
+const _tokenCache = new Map();
+const CACHE_TTL   = 5 * 60 * 1000; // 5 minutes
+
 let _jwks = null;
 function getJWKS() {
   if (!_jwks) _jwks = createRemoteJWKSet(new URL(JWKS_URL));
   return _jwks;
 }
+
+// Probe au démarrage pour diagnostiquer si le JWKS est accessible
+fetch(JWKS_URL, { signal: AbortSignal.timeout(5000) })
+  .then(r => console.log(`[Auth] JWKS probe : HTTP ${r.status}`))
+  .catch(e => console.warn(`[Auth] JWKS inaccessible : ${e.message} — fallback Graph sera utilisé`));
 
 // ── Stratégie 1 : validation JWT sans audience check ────────────────────────
 async function validateAsJWT(token) {
@@ -68,6 +77,13 @@ export async function authMiddleware(req, res, next) {
 
   const token = authHeader.slice(7);
 
+  // Cache hit — évite un appel réseau à chaque requête
+  const cached = _tokenCache.get(token);
+  if (cached && Date.now() < cached.exp) {
+    req.user = cached.user;
+    return next();
+  }
+
   let user;
   try {
     user = await validateAsJWT(token);
@@ -82,6 +98,8 @@ export async function authMiddleware(req, res, next) {
       return res.status(401).json({ error: 'Token invalide', detail: graphErr.message, authRequired: true });
     }
   }
+
+  _tokenCache.set(token, { user, exp: Date.now() + CACHE_TTL });
 
   if (ALLOWED_EMAILS.length > 0 && !ALLOWED_EMAILS.includes(user.email)) {
     console.warn(`[Auth] Refusé: ${user.email}`);
