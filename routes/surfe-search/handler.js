@@ -3,8 +3,8 @@ import { Router } from 'express';
 const router = Router();
 
 const SURFE_ENRICH_URL = 'https://api.surfe.com/v2/people/enrich';
-const POLL_ATTEMPTS    = 8;
-const POLL_DELAY_MS    = 1500;
+const POLL_ATTEMPTS    = 10;
+const POLL_DELAY_MS    = 2000;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
