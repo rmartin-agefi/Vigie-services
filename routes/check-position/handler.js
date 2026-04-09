@@ -30,8 +30,9 @@ router.post('/', async (req, res) => {
   try {
     const text = await callChat(prompt, { model: 'gpt-4.1-mini', temperature: 0 });
 
-    // Le modèle doit retourner du JSON brut — on le parse pour valider
-    const data = JSON.parse(text);
+    // Nettoyer les balises markdown éventuelles (```json ... ```)
+    const cleaned = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    const data = JSON.parse(cleaned);
     return res.json(data);
   } catch (err) {
     console.error('[check-position] Erreur:', err.message);
