@@ -5,7 +5,22 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { authMiddleware } from './middleware/auth.js';
+import { requirePermission } from './middleware/permissions.js';
 import { refreshAll } from './lib/gcs.js';
+import { refreshPermissionsCache } from './lib/firestore.js';
+
+// Route name → module permission required (null = auth only, no module check)
+const ROUTE_PERMISSIONS = {
+  'entity-highlighter':     'eh',
+  'linkedin-summary':       'linkedin',
+  'check-position':         'linkedin',
+  'surfe-search':           'linkedin',
+  'salesforce-search':      'linkedin',
+  'salesforce-search-link': 'linkedin',
+  'piano-check-agefi':      'linkedin',
+  'piano-check-opinion':    'linkedin',
+  'refresh-cache':          null,
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -26,8 +41,14 @@ for (const name of routeDirs) {
   if (!existsSync(handlerPath)) continue;
 
   const { default: handler } = await import(pathToFileURL(handlerPath).href);
-  app.use(`/webhook/${name}`, handler);
-  console.log(`  ✓ /webhook/${name}`);
+  const moduleKey = ROUTE_PERMISSIONS[name];
+  if (moduleKey !== undefined && moduleKey !== null) {
+    app.use(`/webhook/${name}`, requirePermission(moduleKey), handler);
+    console.log(`  ✓ /webhook/${name} [permission: ${moduleKey}]`);
+  } else {
+    app.use(`/webhook/${name}`, handler);
+    console.log(`  ✓ /webhook/${name}`);
+  }
 }
 
 // Health check
@@ -40,6 +61,7 @@ app.post('/admin/refresh', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   refreshAll();
+  refreshPermissionsCache();
   res.json({ ok: true });
 });
 
