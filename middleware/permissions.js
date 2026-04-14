@@ -10,9 +10,12 @@
 import { getUserPermissions } from '../lib/firestore.js';
 
 /**
- * @param {string} moduleKey - 'eh' | 'linkedin' | 'alpha' | 'llm'
+ * @param {...string} moduleKeys - clés de modules requis (logique OR : au moins un doit être actif)
+ * Exemples :
+ *   requirePermission('eh')             → eh doit être true
+ *   requirePermission('eh', 'alpha')    → eh OU alpha doit être true
  */
-export function requirePermission(moduleKey) {
+export function requirePermission(...moduleKeys) {
   return async (req, res, next) => {
     // Dev mode — bypass complet
     if (req.user?.authBypass) return next();
@@ -23,11 +26,12 @@ export function requirePermission(moduleKey) {
 
     try {
       const perms = await getUserPermissions(req.user.email);
-      if (!perms[moduleKey]) {
-        console.warn(`[Permissions] Refusé (${req.user.email}) — module ${moduleKey}`);
+      const allowed = moduleKeys.some(key => perms[key]);
+      if (!allowed) {
+        console.warn(`[Permissions] Refusé (${req.user.email}) — modules requis: ${moduleKeys.join(' ou ')}`);
         return res.status(403).json({
           error: 'Accès refusé',
-          detail: `Module "${moduleKey}" non activé pour ce compte`,
+          detail: `Aucun des modules requis (${moduleKeys.join(', ')}) n'est activé pour ce compte`,
           authRequired: false,
         });
       }
