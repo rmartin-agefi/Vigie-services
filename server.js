@@ -11,7 +11,7 @@ import { refreshPermissionsCache } from './lib/firestore.js';
 
 // Route name → module permission required (null = auth only, no module check)
 const ROUTE_PERMISSIONS = {
-  'entity-highlighter':     'eh',
+  'entity-highlighter':     ['eh', 'alpha'],  // partagé entre les deux modules
   'linkedin-summary':       'linkedin',
   'check-position':         'linkedin',
   'surfe-search':           'linkedin',
@@ -43,8 +43,9 @@ for (const name of routeDirs) {
   const { default: handler } = await import(pathToFileURL(handlerPath).href);
   const moduleKey = ROUTE_PERMISSIONS[name];
   if (moduleKey !== undefined && moduleKey !== null) {
-    app.use(`/webhook/${name}`, requirePermission(moduleKey), handler);
-    console.log(`  ✓ /webhook/${name} [permission: ${moduleKey}]`);
+    const keys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
+    app.use(`/webhook/${name}`, requirePermission(...keys), handler);
+    console.log(`  ✓ /webhook/${name} [permission: ${keys.join(' | ')}]`);
   } else {
     app.use(`/webhook/${name}`, handler);
     console.log(`  ✓ /webhook/${name}`);
