@@ -64,10 +64,13 @@ Les data JSON dans `gs://<GCS_BUCKET>/influence-services/data/<key>.json`.
 
 **Règle absolue : jamais de prompt inline dans le code. Toujours via GCS.**
 
-## Auth
+## Auth & Permissions
 
 - En dev : `AUTH_REQUIRED=false` dans `.env` (ou `npm run dev` le fait automatiquement)
-- En prod : validation JWT Azure AD via JWKS Microsoft (tenant `2e1f24be-...`), fallback Graph /me, cache 5min
+- En prod : validation JWT Azure AD via Graph `/me`, cache 5 min
+- Après l'auth, `requirePermission(moduleKey)` vérifie Firestore — cache 5 min
+- `ROUTE_PERMISSIONS` dans `server.js` mappe chaque route à son module. Valeur string (`'eh'`) ou tableau (`['eh', 'alpha']`) — tableau = logique **OR**
+- Le cache Firestore est vidé par `POST /webhook/refresh-cache` (clic logo extension) ou `POST /admin/refresh` (admin token)
 - `POST /admin/refresh` protégé par `x-admin-token` header
 
 ## Variables d'environnement
@@ -83,7 +86,7 @@ Voir `.env.example`. Copier en `.env`, ne jamais committer.
 | `/webhook/linkedin-summary` | ✅ OK | `linkedin` | `linkedin/content.js` |
 | `/webhook/salesforce-search` | ✅ OK | `linkedin` | `linkedin/api.js` |
 | `/webhook/salesforce-search-link` | ✅ OK | `linkedin` | `linkedin/api.js` |
-| `/webhook/entity-highlighter` | ✅ OK | `eh` | `entity-highlighter/api.js`, `alpha-reader/viewer.js` |
+| `/webhook/entity-highlighter` | ✅ OK | `eh` **ou** `alpha` | `entity-highlighter/api.js`, `alpha-reader/viewer.js` |
 | `/webhook/piano-check-agefi` | ✅ OK | `linkedin` | `linkedin/api.js` |
 | `/webhook/piano-check-opinion` | ✅ OK | `linkedin` | `linkedin/api.js` |
 | `/webhook/refresh-cache` | ✅ OK | — (auth only) | — |
