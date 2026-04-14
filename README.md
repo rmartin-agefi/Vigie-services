@@ -40,7 +40,8 @@ npm run dev            # AUTH_REQUIRED=false, hot-reload
 ## Ajouter une route
 
 1. Créer `routes/<nom>/handler.js` avec `export default router`
-2. Le serveur monte automatiquement `/webhook/<nom>` au démarrage
+2. Ajouter `'<nom>': 'moduleKey'` dans `ROUTE_PERMISSIONS` dans `server.js`
+3. Le serveur monte automatiquement `/webhook/<nom>` au démarrage
 
 ## Prompts GCS
 
@@ -62,17 +63,11 @@ gcloud builds submit --config infra/cloudbuild.yaml \
   --substitutions _REGION=europe-west9,_PROJECT_ID=deft-gearbox-408209
 ```
 
-## Tâches restantes
+## Sécurité
 
-### Auth Cloud Run (priorité après deploy)
-Sécuriser les endpoints — Cloud Run ne doit répondre qu'aux utilisateurs connectés dans l'extension.
+Chaque requête `/webhook/*` passe par deux middlewares :
 
-**Côté extension** (`core/auth.js`) :
-- Ajouter un helper `getAuthHeaders()` qui lit `accessToken` depuis `chrome.storage.local`
-- Inclure `Authorization: Bearer <accessToken>` dans tous les appels vers Cloud Run
-- Si token absent → déclencher refresh silencieux avant de retenter
+1. **`middleware/auth.js`** — valide le token Azure AD via Microsoft Graph `/me`, cache 5 min
+2. **`middleware/permissions.js`** — vérifie dans Firestore que l'utilisateur a accès au module concerné (`eh`, `linkedin`, etc.), cache 5 min
 
-**Côté Cloud Run** (`middleware/auth.js`) :
-- Valider le JWT Bearer via JWKS Microsoft (`https://login.microsoftonline.com/<tid>/discovery/v2.0/keys`)
-- Vérifier `tid === '2e1f24be-...'` (tenant BeyMédias)
-- Rejeter 401 si token absent, invalide ou hors tenant
+La map `ROUTE_PERMISSIONS` dans `server.js` associe chaque route à son module requis.

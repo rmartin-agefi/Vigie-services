@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
     .replace('{{experience}}', experience ?? '');
 
   try {
-    const text = await callChat(prompt, { model: 'gpt-4o-mini', temperature: 0.3 });
+    const text = await callChat(prompt, { model: 'gpt-4.1-mini', temperature: 0.3 });
     const data = JSON.parse(text);
     return res.json(data);
   } catch (err) {

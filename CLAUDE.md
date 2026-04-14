@@ -26,11 +26,16 @@ gcloud builds submit --config infra/cloudbuild.yaml \
 
 ```
 influence-services/
-├── server.js              ← Point d'entrée. Auto-charge routes/*/handler.js
+├── server.js              ← Point d'entrée. Auto-charge routes/*/handler.js + applique permissions
 ├── middleware/
-│   └── auth.js            ← Azure AD JWT (JWKS + Graph fallback, cache 5min). Bypass si AUTH_REQUIRED=false
+│   ├── auth.js            ← Azure AD (Graph /me, cache 5min). Bypass si AUTH_REQUIRED=false
+│   └── permissions.js     ← requirePermission(moduleKey) — vérifie Firestore après auth
 ├── lib/
-│   └── gcs.js             ← Cache GCS 5 min : getPrompt(key), getData(key), refreshAll()
+│   ├── gcs.js             ← Cache GCS 5 min : getPrompt(key), getData(key), refreshAll()
+│   ├── firestore.js       ← Lecture permissions depuis Firestore REST, cache 5 min
+│   ├── openai.js          ← callChat(prompt, options)
+│   ├── salesforce.js      ← soslSearch(), CONTACT_FIELDS, escapeSosl()
+│   └── piano.js           ← checkSubscription(email, media)
 ├── infra/
 │   ├── cloudbuild.yaml    ← CI/CD Cloud Build
 │   └── sync-prompts.sh    ← Upload prompts/data locaux → GCS + refresh cache
@@ -45,7 +50,8 @@ influence-services/
 
 1. Créer `routes/<nom-webhook>/handler.js`
 2. `export default router` (Express Router)
-3. Le serveur monte automatiquement `/webhook/<nom-webhook>` — même chemin qu'en n8n
+3. Ajouter une entrée dans `ROUTE_PERMISSIONS` dans `server.js` : `'nom-webhook': 'moduleKey'` (ou `null` si pas de check de module)
+4. Le serveur monte automatiquement `/webhook/<nom-webhook>` au démarrage
 
 ## Prompts GCS
 
@@ -68,16 +74,18 @@ Les data JSON dans `gs://<GCS_BUCKET>/influence-services/data/<key>.json`.
 
 Voir `.env.example`. Copier en `.env`, ne jamais committer.
 
-## Workflows migrés
+## Routes disponibles
 
-| Route | Statut | Utilisé dans l'extension |
-|-------|--------|--------------------------|
-| `/webhook/surfe-search` | 🔲 TODO | `linkedin/injector.js` |
-| `/webhook/check-position` | 🔲 TODO | `linkedin/injector.js` |
-| `/webhook/linkedin-summary` | 🔲 TODO | `linkedin/content.js` |
-| `/webhook/salesforce-search` | 🔲 TODO | `linkedin/api.js` |
-| `/webhook/salesforce-search-link` | 🔲 TODO | `linkedin/api.js` |
-| `/webhook/entity-highlighter` | 🔲 TODO | `eh/api.js`, `alpha-reader/viewer.js` |
-| `/webhook/entity-highlighter-create` | 🔲 TODO | `eh/api.js` |
-| `/webhook/piano-check-agefi` | 🔲 TODO | `linkedin/api.js` |
-| `/webhook/piano-check-opinion` | 🔲 TODO | `linkedin/api.js` |
+| Route | Statut | Permission requise | Utilisé dans l'extension |
+|-------|--------|--------------------|--------------------------|
+| `/webhook/surfe-search` | ✅ OK | `linkedin` | `linkedin/injector.js` |
+| `/webhook/check-position` | ✅ OK | `linkedin` | `linkedin/injector.js` |
+| `/webhook/linkedin-summary` | ✅ OK | `linkedin` | `linkedin/content.js` |
+| `/webhook/salesforce-search` | ✅ OK | `linkedin` | `linkedin/api.js` |
+| `/webhook/salesforce-search-link` | ✅ OK | `linkedin` | `linkedin/api.js` |
+| `/webhook/entity-highlighter` | ✅ OK | `eh` | `entity-highlighter/api.js`, `alpha-reader/viewer.js` |
+| `/webhook/piano-check-agefi` | ✅ OK | `linkedin` | `linkedin/api.js` |
+| `/webhook/piano-check-opinion` | ✅ OK | `linkedin` | `linkedin/api.js` |
+| `/webhook/refresh-cache` | ✅ OK | — (auth only) | — |
+
+N8N retiré — toutes les routes tournent sur Cloud Run.
