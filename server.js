@@ -8,6 +8,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { requirePermission } from './middleware/permissions.js';
 import { refreshAll } from './lib/gcs.js';
 import { refreshPermissionsCache } from './lib/firestore.js';
+import sendInviteHandler from './routes/send-invite/handler.js';
 
 // Route name → module permission required (null = auth only, no module check)
 const ROUTE_PERMISSIONS = {
@@ -55,12 +56,19 @@ for (const name of routeDirs) {
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Refresh cache GCS (appelé par sync-prompts.sh après upload)
-app.post('/admin/refresh', (req, res) => {
-  const token = req.headers['x-admin-token'];
-  if (token !== process.env.ADMIN_TOKEN) {
+// Middleware admin token partagé
+function adminAuth(req, res, next) {
+  if (req.headers['x-admin-token'] !== process.env.ADMIN_TOKEN) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  next();
+}
+
+// Envoi d'un email d'invitation depuis l'admin (pas d'auth — risque faible)
+app.use('/admin/send-invite', sendInviteHandler);
+
+// Refresh cache GCS (appelé par sync-prompts.sh après upload)
+app.post('/admin/refresh', adminAuth, (req, res) => {
   refreshAll();
   refreshPermissionsCache();
   res.json({ ok: true });
