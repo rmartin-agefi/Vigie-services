@@ -2,7 +2,8 @@ import { Router } from 'express';
 
 const router = Router();
 
-const SURFE_ENRICH_URL = 'https://api.surfe.com/v2/people/enrich';
+const SURFE_ENRICH_URL  = 'https://api.surfe.com/v2/people/enrich';
+const SURFE_CREDITS_URL = 'https://api.surfe.com/v1/credits';
 const POLL_ATTEMPTS    = 10;
 const POLL_DELAY_MS    = 2000;
 
@@ -87,10 +88,16 @@ router.get('/', async (req, res) => {
       return res.status(204).send();
     }
 
-    // 3. Vérifier la validité de l'email
+    // 3. Vérifier la validité de l'email + récupérer les crédits restants (en parallèle)
     const emailEntry = result?.people?.[0]?.emails?.[0];
+
+    const creditsRes = await fetch(SURFE_CREDITS_URL, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    }).catch(() => null);
+    const credits = creditsRes?.ok ? await creditsRes.json().catch(() => null) : null;
+
     if (emailEntry?.validationStatus === 'VALID') {
-      return res.json({ email: emailEntry.email });
+      return res.json({ email: emailEntry.email, credits });
     }
 
     return res.status(204).send();
