@@ -9,14 +9,21 @@ router.get('/', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'name requis' });
 
   try {
-    const escaped = escapeSoql(name.normalize('NFC'));
-    // Si le nom contient un tiret, chercher aussi la variante avec espace (et inversement)
-    // Variante tiret↔espace uniquement si le nom contient un tiret
-    const alt = name.includes('-') ? escapeSoql(name.replace(/-/g, ' ')) : null;
+    const nfc      = s => s.normalize('NFC');
+    const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const nameNfc  = nfc(name);
+    const variants = new Set([nameNfc]);
 
-    const where = alt
-      ? `(Name LIKE '%${escaped}%' OR Name LIKE '%${alt}%')`
-      : `Name LIKE '%${escaped}%'`;
+    // Variante sans accents si le nom en contient
+    const stripped = stripAcc(nameNfc);
+    if (stripped !== nameNfc) variants.add(stripped);
+
+    // Variante tiret↔espace
+    if (nameNfc.includes('-')) variants.add(nameNfc.replace(/-/g, ' '));
+    if (stripped.includes('-')) variants.add(stripped.replace(/-/g, ' '));
+
+    const conditions = [...variants].map(v => `Name LIKE '%${escapeSoql(v)}%'`);
+    const where = conditions.length === 1 ? conditions[0] : `(${conditions.join(' OR ')})`;
 
     const records = await soqlQuery(
       `SELECT ${CONTACT_FIELDS} FROM contact WHERE ${where} LIMIT 5`

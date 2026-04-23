@@ -8,15 +8,29 @@ const router = Router();
 const CONTACT_SOSL_FIELDS = CONTACT_FIELDS;
 const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership, Pictos_compte__c, OwnerId, Owner.Name';
 
-const nfc = s => s.normalize('NFC');
+const nfc      = s => s.normalize('NFC');
+const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const hasAcc   = s => s !== stripAcc(s);
+
+function _soslVariants(name) {
+  const base = nfc(name);
+  const stripped = stripAcc(base);
+  return hasAcc(base) ? [base, stripped] : [base];
+}
 
 function buildContactSosl(persons) {
-  const terms = persons.slice(0, 20).map(nfc).map(escapeSosl).join('" OR "');
+  const terms = persons.slice(0, 20)
+    .flatMap(_soslVariants)
+    .map(escapeSosl)
+    .join('" OR "');
   return `FIND {"${terms}"} IN NAME FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS}) LIMIT 50`;
 }
 
 function buildAccountSosl(organizations) {
-  const terms = organizations.slice(0, 15).map(nfc).map(escapeSosl).join('" OR "');
+  const terms = organizations.slice(0, 15)
+    .flatMap(_soslVariants)
+    .map(escapeSosl)
+    .join('" OR "');
   return `FIND {"${terms}"} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS}) LIMIT 30`;
 }
 
@@ -25,7 +39,7 @@ function mapContacts(sfContacts, personNames) {
   for (const contact of sfContacts) {
     if (!contact.Name) continue;
     const matched = personNames.find(name => {
-      const a = nfc(name).toLowerCase(), b = nfc(contact.Name).toLowerCase();
+      const a = stripAcc(nfc(name)).toLowerCase(), b = stripAcc(nfc(contact.Name)).toLowerCase();
       return b.includes(a) || a.includes(b) || b.split(' ').some(p => p.length > 3 && a.includes(p));
     });
     if (!matched) continue;
@@ -67,7 +81,7 @@ function mapAccounts(sfAccounts, orgNames) {
   for (const account of sfAccounts) {
     if (!account.Name) continue;
     const matched = orgNames.find(name => {
-      const a = nfc(name).toLowerCase(), b = nfc(account.Name).toLowerCase();
+      const a = stripAcc(nfc(name)).toLowerCase(), b = stripAcc(nfc(account.Name)).toLowerCase();
       return b.includes(a) || a.includes(b);
     });
     if (!matched) continue;
