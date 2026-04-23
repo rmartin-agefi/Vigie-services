@@ -9,8 +9,17 @@ router.get('/', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'name requis' });
 
   try {
+    const escaped = escapeSoql(name);
+    // Si le nom contient un tiret, chercher aussi la variante avec espace (et inversement)
+    // Variante tiret↔espace uniquement si le nom contient un tiret
+    const alt = name.includes('-') ? escapeSoql(name.replace(/-/g, ' ')) : null;
+
+    const where = alt
+      ? `(Name LIKE '%${escaped}%' OR Name LIKE '%${alt}%')`
+      : `Name LIKE '%${escaped}%'`;
+
     const records = await soqlQuery(
-      `SELECT ${CONTACT_FIELDS} FROM contact WHERE Name LIKE '%${escapeSoql(name)}%' LIMIT 5`
+      `SELECT ${CONTACT_FIELDS} FROM contact WHERE ${where} LIMIT 5`
     );
     return res.json([{ records }]);
   } catch (err) {
