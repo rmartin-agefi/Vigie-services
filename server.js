@@ -16,6 +16,7 @@ const ROUTE_PERMISSIONS = {
   'linkedin-summary':       'linkedin',
   'check-position':         'linkedin',
   'surfe-search':           'linkedin',
+  'surfe-credits':          'linkedin',
   'salesforce-search':      'linkedin',
   'salesforce-search-link': 'linkedin',
   'piano-check-agefi':      'linkedin',
