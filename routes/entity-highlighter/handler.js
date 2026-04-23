@@ -8,13 +8,15 @@ const router = Router();
 const CONTACT_SOSL_FIELDS = CONTACT_FIELDS;
 const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership, Pictos_compte__c, OwnerId, Owner.Name';
 
+const nfc = s => s.normalize('NFC');
+
 function buildContactSosl(persons) {
-  const terms = persons.slice(0, 20).map(escapeSosl).join('" OR "');
+  const terms = persons.slice(0, 20).map(nfc).map(escapeSosl).join('" OR "');
   return `FIND {"${terms}"} IN NAME FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS}) LIMIT 50`;
 }
 
 function buildAccountSosl(organizations) {
-  const terms = organizations.slice(0, 15).map(escapeSosl).join('" OR "');
+  const terms = organizations.slice(0, 15).map(nfc).map(escapeSosl).join('" OR "');
   return `FIND {"${terms}"} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS}) LIMIT 30`;
 }
 
@@ -23,8 +25,8 @@ function mapContacts(sfContacts, personNames) {
   for (const contact of sfContacts) {
     if (!contact.Name) continue;
     const matched = personNames.find(name => {
-      const a = name.toLowerCase(), b = contact.Name.toLowerCase();
-      return b.includes(a) || a.includes(b) || b.split(' ').some(p => a.includes(p));
+      const a = nfc(name).toLowerCase(), b = nfc(contact.Name).toLowerCase();
+      return b.includes(a) || a.includes(b) || b.split(' ').some(p => p.length > 3 && a.includes(p));
     });
     if (!matched) continue;
     if (!result[matched]) result[matched] = [];
@@ -65,7 +67,7 @@ function mapAccounts(sfAccounts, orgNames) {
   for (const account of sfAccounts) {
     if (!account.Name) continue;
     const matched = orgNames.find(name => {
-      const a = name.toLowerCase(), b = account.Name.toLowerCase();
+      const a = nfc(name).toLowerCase(), b = nfc(account.Name).toLowerCase();
       return b.includes(a) || a.includes(b);
     });
     if (!matched) continue;

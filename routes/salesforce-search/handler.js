@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'name requis' });
 
   try {
-    const escaped = escapeSoql(name);
+    const escaped = escapeSoql(name.normalize('NFC'));
     // Si le nom contient un tiret, chercher aussi la variante avec espace (et inversement)
     // Variante tiret↔espace uniquement si le nom contient un tiret
     const alt = name.includes('-') ? escapeSoql(name.replace(/-/g, ' ')) : null;
