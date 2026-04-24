@@ -1,33 +1,59 @@
 import { Router } from 'express';
-import { soqlQuery, escapeSoql, CONTACT_FIELDS } from '../../lib/salesforce.js';
+import { soqlQuery, soslSearch, escapeSoql, escapeSosl, CONTACT_FIELDS } from '../../lib/salesforce.js';
 
 const router = Router();
 
-// GET /webhook/salesforce-search?name=...
+const nfc          = s => s.normalize('NFC');
+const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const toSoslTokens = name => stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
+const escapeLike   = v => escapeSoql(v).replace(/%/g, '\\%');
+
+// GET /webhook/salesforce-search?name=...&linkedinUrl=... (linkedinUrl optionnel)
 router.get('/', async (req, res) => {
-  const { name } = req.query;
+  const { name, linkedinUrl } = req.query;
   if (!name) return res.status(400).json({ error: 'name requis' });
 
   try {
-    const nfc      = s => s.normalize('NFC');
-    const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const nameNfc  = nfc(name);
-    const variants = new Set([nameNfc]);
+    // ── 1. SOSL par nom — tokens accent-insensitive ──────────────
+    const soslQuery = `FIND {${escapeSosl(toSoslTokens(name))}} IN NAME FIELDS RETURNING Contact(${CONTACT_FIELDS}) LIMIT 5`;
 
-    // Variante sans accents si le nom en contient
-    const stripped = stripAcc(nameNfc);
-    if (stripped !== nameNfc) variants.add(stripped);
+    // ── 2. SOQL par URL LinkedIn (si fournie) ────────────────────
+    let urlSoql = null;
+    if (linkedinUrl) {
+      let decoded = linkedinUrl;
+      try { decoded = decodeURIComponent(linkedinUrl); } catch (_) {}
+      const reEncoded = encodeURIComponent(decoded);
+      const conditions = decoded === reEncoded
+        ? [`lien_linkedin_indiv__c LIKE '%${escapeLike(decoded)}%'`]
+        : [
+            `lien_linkedin_indiv__c LIKE '%${escapeLike(decoded)}%'`,
+            `lien_linkedin_indiv__c LIKE '%${escapeLike(reEncoded)}%'`,
+          ];
+      const where = conditions.length === 1 ? conditions[0] : `(${conditions.join(' OR ')})`;
+      urlSoql = `SELECT ${CONTACT_FIELDS} FROM Contact WHERE ${where} LIMIT 5`;
+    }
 
-    // Variante tiret↔espace
-    if (nameNfc.includes('-')) variants.add(nameNfc.replace(/-/g, ' '));
-    if (stripped.includes('-')) variants.add(stripped.replace(/-/g, ' '));
+    // ── 3. Exécution en parallèle ────────────────────────────────
+    const [soslResult, soqlResult] = await Promise.allSettled([
+      soslSearch(soslQuery),
+      urlSoql ? soqlQuery(urlSoql) : Promise.resolve([]),
+    ]);
 
-    const conditions = [...variants].map(v => `Name LIKE '%${escapeSoql(v)}%'`);
-    const where = conditions.length === 1 ? conditions[0] : `(${conditions.join(' OR ')})`;
+    const byName = soslResult.status === 'fulfilled' ? soslResult.value : [];
+    const byUrl  = soqlResult.status === 'fulfilled' ? soqlResult.value : [];
 
-    const records = await soqlQuery(
-      `SELECT ${CONTACT_FIELDS} FROM contact WHERE ${where} LIMIT 5`
-    );
+    if (soslResult.status === 'rejected')
+      console.error('[salesforce-search] SOSL error:', soslResult.reason?.message);
+    if (soqlResult.status === 'rejected')
+      console.error('[salesforce-search] SOQL URL error:', soqlResult.reason?.message);
+
+    // ── 4. Fusion + déduplication par Id (byUrl en premier = plus précis) ──
+    const seen = new Set();
+    const records = [];
+    for (const r of [...byUrl, ...byName]) {
+      if (!seen.has(r.Id)) { seen.add(r.Id); records.push(r); }
+    }
+
     return res.json([{ records }]);
   } catch (err) {
     console.error('[salesforce-search] Erreur:', err.message);
