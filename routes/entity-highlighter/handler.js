@@ -10,28 +10,25 @@ const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership
 
 const nfc      = s => s.normalize('NFC');
 const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-const hasAcc   = s => s !== stripAcc(s);
 
-function _soslVariants(name) {
-  const base = nfc(name);
-  const stripped = stripAcc(base);
-  return hasAcc(base) ? [base, stripped] : [base];
+// Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
+// Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)
+function toSoslTokens(name) {
+  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
 }
 
 function buildContactSosl(persons) {
   const terms = persons.slice(0, 20)
-    .flatMap(_soslVariants)
-    .map(escapeSosl)
-    .join('" OR "');
-  return `FIND {"${terms}"} IN NAME FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS}) LIMIT 50`;
+    .map(name => escapeSosl(toSoslTokens(name)))
+    .join(' OR ');
+  return `FIND {${terms}} IN NAME FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS}) LIMIT 50`;
 }
 
 function buildAccountSosl(organizations) {
   const terms = organizations.slice(0, 15)
-    .flatMap(_soslVariants)
-    .map(escapeSosl)
-    .join('" OR "');
-  return `FIND {"${terms}"} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS}) LIMIT 30`;
+    .map(name => escapeSosl(toSoslTokens(name)))
+    .join(' OR ');
+  return `FIND {${terms}} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS}) LIMIT 30`;
 }
 
 function mapContacts(sfContacts, personNames) {
