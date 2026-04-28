@@ -68,6 +68,7 @@ function mapContacts(sfContacts, personNames) {
       nbMandats:     contact.Nb_Mandats__c       || 0,
       nbPostes:      contact.NB_Postes__c        || 0,
       pictos:        contact.Pictos_contact__c   || '',
+      parcours:      contact.Parcours_professionnel__c || '',
     });
   }
   return result;
