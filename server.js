@@ -22,6 +22,7 @@ const ROUTE_PERMISSIONS = {
   'piano-check-agefi':      'linkedin',
   'piano-check-opinion':    'linkedin',
   'refresh-cache':          null,
+  'bug-reporter':           null,
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +30,7 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Auth sur toutes les routes /webhook/* (bypass si AUTH_REQUIRED=false)
 app.use('/webhook', authMiddleware);
