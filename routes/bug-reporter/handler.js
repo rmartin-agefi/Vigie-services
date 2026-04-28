@@ -7,7 +7,25 @@ const CLICKUP_KEY    = () => process.env.CLICKUP_API_KEY;
 const CLICKUP_TEAM   = () => process.env.CLICKUP_TEAM_ID;
 const CLICKUP_PARENT = () => process.env.CLICKUP_PARENT_TASK_ID;
 
-function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp }) {
+function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors }) {
+  const tokenLine = tokenAgeMins == null
+    ? '- **Token :** inconnu'
+    : tokenAgeMins > 55
+      ? `- **Token :** ⚠️ EXPIRÉ (${tokenAgeMins} min)`
+      : `- **Token :** ✓ frais (${tokenAgeMins} min)`;
+
+  const permsLine = userPermissions
+    ? '- **Modules :** ' + Object.entries(userPermissions).map(([k, v]) => `${v ? '✓' : '✗'} ${k}`).join(' · ')
+    : '';
+
+  const logsBlock = consoleLogs?.length
+    ? `\n## ⚠️ Console errors/warnings (${consoleLogs.length})\n\`\`\`\n${consoleLogs.map(l => `[${l.t}] [${l.level}] ${l.msg}`).join('\n')}\n\`\`\``
+    : '';
+
+  const fetchBlock = fetchErrors?.length
+    ? `\n## 🔴 Requêtes HTTP échouées\n\`\`\`\n${fetchErrors.map(e => `[${e.t}] ${e.url} → ${e.status || e.error}`).join('\n')}\n\`\`\``
+    : '';
+
   const lines = [
     message ? `## 💬 Description\n${message}\n` : '',
     `## 🌐 Contexte`,
@@ -17,7 +35,11 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
     `- **URL :** ${url || '—'}`,
     pageTitle ? `- **Page :** ${pageTitle}` : '',
     `- **Résolution :** ${screenResolution || '—'}`,
+    tokenLine,
+    permsLine,
     `\n## 🖥️ Navigateur\n\`\`\`\n${userAgent || '—'}\n\`\`\``,
+    logsBlock,
+    fetchBlock,
   ];
   return lines.filter(Boolean).join('\n');
 }
