@@ -49,10 +49,21 @@ router.get('/', async (req, res) => {
 
     // ── 4. Fusion + déduplication par Id (byUrl en premier = plus précis) ──
     const seen = new Set();
-    const records = [];
+    const merged = [];
     for (const r of [...byUrl, ...byName]) {
-      if (!seen.has(r.Id)) { seen.add(r.Id); records.push(r); }
+      if (!seen.has(r.Id)) { seen.add(r.Id); merged.push(r); }
     }
+
+    // ── 5. Filtrage client-side : évite les faux-positifs SOSL (ex: "Colin" ≠ "Collin")
+    // byUrl = match LinkedIn exact → toujours garder
+    const urlIds   = new Set(byUrl.map(r => r.Id));
+    const nameNorm = stripAcc(nfc(name)).toLowerCase();
+    const records  = merged.filter(r => {
+      if (urlIds.has(r.Id)) return true;
+      if (!r.Name) return false;
+      const sfNorm = stripAcc(nfc(r.Name)).toLowerCase();
+      return sfNorm.includes(nameNorm) || nameNorm.includes(sfNorm);
+    });
 
     return res.json([{ records }]);
   } catch (err) {
