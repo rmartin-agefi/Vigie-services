@@ -37,7 +37,7 @@ function mapContacts(sfContacts, personNames) {
     if (!contact.Name) continue;
     const matched = personNames.find(name => {
       const a = stripAcc(nfc(name)).toLowerCase(), b = stripAcc(nfc(contact.Name)).toLowerCase();
-      return b.includes(a) || a.includes(b) || b.split(' ').some(p => p.length > 3 && a.includes(p));
+      return b.includes(a) || a.includes(b);
     });
     if (!matched) continue;
     if (!result[matched]) result[matched] = [];
