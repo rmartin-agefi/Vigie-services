@@ -7,7 +7,7 @@ const CLICKUP_KEY    = () => process.env.CLICKUP_API_KEY;
 const CLICKUP_TEAM   = () => process.env.CLICKUP_TEAM_ID;
 const CLICKUP_PARENT = () => process.env.CLICKUP_PARENT_TASK_ID;
 
-function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors }) {
+function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail }) {
   const tokenLine = tokenAgeMins == null
     ? '- **Token :** inconnu'
     : tokenAgeMins > 55
@@ -16,6 +16,10 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
 
   const permsLine = userPermissions
     ? '- **Modules :** ' + Object.entries(userPermissions).map(([k, v]) => `${v ? '✓' : '✗'} ${k}`).join(' · ')
+    : '';
+
+  const trailBlock = actionTrail?.length
+    ? `\n## 🕐 Dernières actions (${actionTrail.length})\n\`\`\`\n${actionTrail.map(e => `[${e.t}] ${e.icon} ${e.label}`).join('\n')}\n\`\`\``
     : '';
 
   const logsBlock = consoleLogs?.length
@@ -38,6 +42,7 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
     tokenLine,
     permsLine,
     `\n## 🖥️ Navigateur\n\`\`\`\n${userAgent || '—'}\n\`\`\``,
+    trailBlock,
     logsBlock,
     fetchBlock,
   ];
@@ -46,7 +51,7 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
 
 // POST /webhook/bug-reporter
 router.post('/', async (req, res) => {
-  const { screenshot, message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp } = req.body ?? {};
+  const { screenshot, message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail } = req.body ?? {};
 
   if (!screenshot) return res.status(400).json({ error: 'screenshot requis' });
 
@@ -59,7 +64,7 @@ router.post('/', async (req, res) => {
   }
 
   const taskName    = `[Bug] ${new URL(url || 'about:blank').hostname || url} — ${new Date(timestamp || Date.now()).toLocaleString('fr-FR')}`;
-  const description = buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp });
+  const description = buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail });
 
   try {
     // 1. Récupérer la liste parente (nécessaire pour créer une sous-tâche)
