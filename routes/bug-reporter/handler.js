@@ -7,7 +7,22 @@ const CLICKUP_KEY    = () => process.env.CLICKUP_API_KEY;
 const CLICKUP_TEAM   = () => process.env.CLICKUP_TEAM_ID;
 const CLICKUP_PARENT = () => process.env.CLICKUP_PARENT_TASK_ID;
 
-function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail }) {
+const SEVERITY_LABEL    = { blocking: '🚨 Bloquant', annoying: '⚠️ Gênant', minor: 'Mineur' };
+const SEVERITY_PRIORITY = { blocking: 1, annoying: 2, minor: 3 };
+
+function getFriendlySource(url) {
+  try {
+    const u = new URL(url || 'about:blank');
+    if (u.protocol === 'chrome-extension:') {
+      const match = u.pathname.match(/\/modules\/([^/]+)\//);
+      if (match) return match[1].split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+      return 'Extension';
+    }
+    return u.hostname;
+  } catch { return url || '—'; }
+}
+
+function buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, dateFormatted, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail, severity, devicePixelRatio, windowWidth, windowHeight, language }) {
   const tokenLine = tokenAgeMins == null
     ? '- **Token :** inconnu'
     : tokenAgeMins > 55
@@ -17,6 +32,10 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
   const permsLine = userPermissions
     ? '- **Modules :** ' + Object.entries(userPermissions).map(([k, v]) => `${v ? '✓' : '✗'} ${k}`).join(' · ')
     : '';
+
+  const sevLine     = severity ? `- **Sévérité :** ${SEVERITY_LABEL[severity] || severity}` : '';
+  const windowLine  = (windowWidth && windowHeight) ? `- **Fenêtre :** ${windowWidth} × ${windowHeight}${devicePixelRatio ? ` (×${devicePixelRatio})` : ''}` : '';
+  const langLine    = language ? `- **Langue :** ${language}` : '';
 
   const trailBlock = actionTrail?.length
     ? `\n## 🕐 Dernières actions (${actionTrail.length})\n\`\`\`\n${actionTrail.map(e => `[${e.t}] ${e.icon} ${e.label}`).join('\n')}\n\`\`\``
@@ -34,13 +53,16 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
     message ? `## 💬 Description\n${message}\n` : '',
     `## 🌐 Contexte`,
     `- **Signalé par :** ${userName || '—'} (${userEmail || '—'})`,
-    `- **Date :** ${timestamp || new Date().toISOString()}`,
+    `- **Date :** ${dateFormatted || timestamp || new Date().toISOString()}`,
     `- **Version extension :** v${extensionVersion || '—'}`,
     `- **URL :** ${url || '—'}`,
     pageTitle ? `- **Page :** ${pageTitle}` : '',
     `- **Résolution :** ${screenResolution || '—'}`,
+    windowLine,
+    langLine,
     tokenLine,
     permsLine,
+    sevLine,
     `\n## 🖥️ Navigateur\n\`\`\`\n${userAgent || '—'}\n\`\`\``,
     trailBlock,
     logsBlock,
@@ -51,7 +73,7 @@ function buildDescription({ message, url, pageTitle, userEmail, userName, extens
 
 // POST /webhook/bug-reporter
 router.post('/', async (req, res) => {
-  const { screenshot, message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail } = req.body ?? {};
+  const { screenshot, message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail, severity, devicePixelRatio, windowWidth, windowHeight, language } = req.body ?? {};
 
   if (!screenshot) return res.status(400).json({ error: 'screenshot requis' });
 
@@ -63,8 +85,10 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'Configuration ClickUp manquante' });
   }
 
-  const taskName    = `[Bug] ${new URL(url || 'about:blank').hostname || url} — ${new Date(timestamp || Date.now()).toLocaleString('fr-FR')}`;
-  const description = buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail });
+  const dateFormatted = new Date(timestamp || Date.now()).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const taskSource    = getFriendlySource(url);
+  const taskName      = `[Bug] ${taskSource} — ${dateFormatted}`;
+  const description   = buildDescription({ message, url, pageTitle, userEmail, userName, extensionVersion, userAgent, screenResolution, timestamp, dateFormatted, tokenAgeMins, userPermissions, consoleLogs, fetchErrors, actionTrail, severity, devicePixelRatio, windowWidth, windowHeight, language });
 
   try {
     // 1. Récupérer la liste parente (nécessaire pour créer une sous-tâche)
@@ -85,7 +109,7 @@ router.post('/', async (req, res) => {
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, description, parent: parent.id }),
+      body: JSON.stringify({ name: taskName, description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3 }),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();
