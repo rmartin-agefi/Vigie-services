@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getPrompt } from '../../lib/gcs.js';
-import { callChat } from '../../lib/openai.js';
+import { callAI } from '../../lib/ai.js';
 
 const router = Router();
 
@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
     .replace('{{experience}}', experience ?? '');
 
   try {
-    const text = await callChat(prompt, { model: 'gpt-4.1-mini', temperature: 0.3 });
+    const text = await callAI('vigie.linkedin-summary', prompt, { temperature: 0.3 });
     const data = JSON.parse(text);
     return res.json(data);
   } catch (err) {

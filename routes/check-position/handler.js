@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getPrompt } from '../../lib/gcs.js';
-import { callChat } from '../../lib/openai.js';
+import { callAI } from '../../lib/ai.js';
 
 const router = Router();
 
@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
     .replace('{{sfFn2}}',        sfFn2        ?? '');
 
   try {
-    const text = await callChat(prompt, { model: 'gpt-4.1-mini', temperature: 0 });
+    const text = await callAI('vigie.check-position', prompt, { temperature: 0 });
 
     // Nettoyer les balises markdown éventuelles (```json ... ```)
     const cleaned = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
