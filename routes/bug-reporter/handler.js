@@ -6,7 +6,10 @@ const CLICKUP_API      = 'https://api.clickup.com/api/v2';
 const CLICKUP_KEY      = () => process.env.CLICKUP_API_KEY;
 const CLICKUP_TEAM     = () => process.env.CLICKUP_TEAM_ID;
 const CLICKUP_PARENT   = () => process.env.CLICKUP_PARENT_TASK_ID;
-const CLICKUP_ASSIGNEE = () => process.env.CLICKUP_ASSIGNEE_ID ? [Number(process.env.CLICKUP_ASSIGNEE_ID)] : [];
+const CLICKUP_ASSIGNEE = () => {
+  const raw = process.env.CLICKUP_ASSIGNEE_ID?.trim();
+  return raw ? [Number(raw)] : [];
+};
 
 const SEVERITY_LABEL    = { blocking: '🚨 Bloquant', annoying: '⚠️ Gênant', minor: 'Mineur' };
 const SEVERITY_PRIORITY = { blocking: 1, annoying: 2, minor: 3 };
@@ -107,10 +110,12 @@ router.post('/', async (req, res) => {
     if (!listId) return res.status(502).json({ error: 'List ID introuvable sur la tâche parente' });
 
     // 2. Créer la sous-tâche
+    const assignees = CLICKUP_ASSIGNEE();
+    console.log('[bug-reporter] assignees:', assignees);
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees: CLICKUP_ASSIGNEE() }),
+      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees, status: 'to do' }),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();

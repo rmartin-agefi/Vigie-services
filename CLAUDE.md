@@ -112,6 +112,10 @@ Providers supportés actuellement : `openai`. Les modèles `gemini` et `claude` 
 
 Voir `.env.example`. Copier en `.env`, ne jamais committer.
 
+Variables ClickUp pour le bug reporter :
+- `CLICKUP_API_KEY`, `CLICKUP_TEAM_ID`, `CLICKUP_PARENT_TASK_ID` — obligatoires
+- `CLICKUP_ASSIGNEE_ID` — optionnel, ID numérique ClickUp. Si défini, chaque bug report est automatiquement assigné à cet utilisateur.
+
 ## Routes disponibles
 
 | Route | Statut | Permission requise | Utilisé dans l'extension |
