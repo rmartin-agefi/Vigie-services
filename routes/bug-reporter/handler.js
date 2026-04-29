@@ -115,7 +115,7 @@ router.post('/', async (req, res) => {
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees }),
+      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees, status: 'A FAIRE' }),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();
@@ -124,7 +124,16 @@ router.post('/', async (req, res) => {
     }
     const task = await taskRes.json();
 
-    // 2. Attacher le screenshot annoté
+    // 3. Assigner explicitement (assignees dans la création ignorés pour les sous-tâches)
+    for (const userId of assignees) {
+      fetch(`${CLICKUP_API}/task/${task.id}/assignee`, {
+        method: 'POST',
+        headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignee: userId }),
+      }).catch(e => console.error('[bug-reporter] Assignee error:', e.message));
+    }
+
+    // 4. Attacher le screenshot annoté
     const base64 = screenshot.replace(/^data:image\/png;base64,/, '');
     const buffer = Buffer.from(base64, 'base64');
     const formData = new FormData();
