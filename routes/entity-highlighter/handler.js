@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getPrompt } from '../../lib/gcs.js';
-import { callChat } from '../../lib/openai.js';
+import { callAI } from '../../lib/ai.js';
 import { soslSearch, escapeSosl, CONTACT_FIELDS } from '../../lib/salesforce.js';
 
 const router = Router();
@@ -114,7 +114,8 @@ router.post('/', async (req, res) => {
   let persons = [], organizations = [];
   try {
     const prompt = promptTemplate.replace('{{text}}', text);
-    const raw = await callChat(prompt, { model: 'gpt-4.1-mini', temperature: 0 });
+    const endpointKey = source === 'alpha' ? 'vigie.alpha-reader' : 'vigie.entity-highlighter';
+    const raw = await callAI(endpointKey, prompt, { temperature: 0 });
     const clean = raw.replace(/```json\n?|\n?```/g, '').trim();
     const parsed = JSON.parse(clean);
     persons       = parsed.persons       ?? [];

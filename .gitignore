@@ -2,4 +2,5 @@ node_modules/
 .env
 prompts/
 data/
+config/
 TODO.md
