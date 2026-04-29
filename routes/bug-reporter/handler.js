@@ -126,11 +126,13 @@ router.post('/', async (req, res) => {
 
     // 3. Assigner explicitement (assignees dans la création ignorés pour les sous-tâches)
     for (const userId of assignees) {
-      fetch(`${CLICKUP_API}/task/${task.id}/assignee`, {
+      const assignRes = await fetch(`${CLICKUP_API}/task/${task.id}/assignee`, {
         method: 'POST',
         headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignee: userId }),
-      }).catch(e => console.error('[bug-reporter] Assignee error:', e.message));
+      });
+      const assignBody = await assignRes.text();
+      console.log(`[bug-reporter] Assignee ${userId} → ${assignRes.status}: ${assignBody}`);
     }
 
     // 4. Attacher le screenshot annoté
