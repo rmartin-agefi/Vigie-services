@@ -115,7 +115,7 @@ router.post('/', async (req, res) => {
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees, status: 'to do' }),
+      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees }),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();
