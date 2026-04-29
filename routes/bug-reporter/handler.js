@@ -2,10 +2,11 @@ import { Router } from 'express';
 
 const router = Router();
 
-const CLICKUP_API    = 'https://api.clickup.com/api/v2';
-const CLICKUP_KEY    = () => process.env.CLICKUP_API_KEY;
-const CLICKUP_TEAM   = () => process.env.CLICKUP_TEAM_ID;
-const CLICKUP_PARENT = () => process.env.CLICKUP_PARENT_TASK_ID;
+const CLICKUP_API      = 'https://api.clickup.com/api/v2';
+const CLICKUP_KEY      = () => process.env.CLICKUP_API_KEY;
+const CLICKUP_TEAM     = () => process.env.CLICKUP_TEAM_ID;
+const CLICKUP_PARENT   = () => process.env.CLICKUP_PARENT_TASK_ID;
+const CLICKUP_ASSIGNEE = () => process.env.CLICKUP_ASSIGNEE_ID ? [Number(process.env.CLICKUP_ASSIGNEE_ID)] : [];
 
 const SEVERITY_LABEL    = { blocking: '🚨 Bloquant', annoying: '⚠️ Gênant', minor: 'Mineur' };
 const SEVERITY_PRIORITY = { blocking: 1, annoying: 2, minor: 3 };
@@ -109,7 +110,7 @@ router.post('/', async (req, res) => {
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3 }),
+      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees: CLICKUP_ASSIGNEE() }),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();
