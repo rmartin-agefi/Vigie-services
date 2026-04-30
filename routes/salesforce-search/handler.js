@@ -5,7 +5,9 @@ const router = Router();
 
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-const toSoslTokens = name => stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
+// Normalise espaces autour des apostrophes : "d' Hauteville" → "d Hauteville"
+const normalizeApo = s => s.replace(/\s*'\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const toSoslTokens = name => normalizeApo(stripAcc(nfc(name)).toLowerCase()).replace(/-/g, ' ').trim();
 const escapeLike   = v => escapeSoql(v).replace(/%/g, '\\%');
 
 // GET /webhook/salesforce-search?name=...&linkedinUrl=... (linkedinUrl optionnel)
@@ -57,11 +59,11 @@ router.get('/', async (req, res) => {
     // ── 5. Filtrage client-side : évite les faux-positifs SOSL (ex: "Colin" ≠ "Collin")
     // byUrl = match LinkedIn exact → toujours garder
     const urlIds   = new Set(byUrl.map(r => r.Id));
-    const nameNorm = stripAcc(nfc(name)).toLowerCase();
+    const nameNorm = normalizeApo(stripAcc(nfc(name)).toLowerCase());
     const records  = merged.filter(r => {
       if (urlIds.has(r.Id)) return true;
       if (!r.Name) return false;
-      const sfNorm = stripAcc(nfc(r.Name)).toLowerCase();
+      const sfNorm = normalizeApo(stripAcc(nfc(r.Name)).toLowerCase());
       return sfNorm.includes(nameNorm) || nameNorm.includes(sfNorm);
     });
 
