@@ -16,7 +16,7 @@ const normalizeApo = s => s.replace(/\s*'\s*/g, ' ').replace(/\s+/g, ' ').trim()
 // Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
 // Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)
 function toSoslTokens(name) {
-  return normalizeApo(stripAcc(nfc(name)).toLowerCase()).replace(/-/g, ' ').trim();
+  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
 }
 
 function buildContactSosl(persons) {
