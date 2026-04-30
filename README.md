@@ -71,3 +71,4 @@ Chaque requête `/webhook/*` passe par deux middlewares :
 2. **`middleware/permissions.js`** — vérifie dans Firestore que l'utilisateur a accès au module concerné (`eh`, `linkedin`, etc.), cache 5 min
 
 La map `ROUTE_PERMISSIONS` dans `server.js` associe chaque route à son module requis.
+tempzdjflskdfjs
