@@ -8,13 +8,15 @@ const router = Router();
 const CONTACT_SOSL_FIELDS = CONTACT_FIELDS;
 const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership, Pictos_compte__c, OwnerId, Owner.Name';
 
-const nfc      = s => s.normalize('NFC');
-const stripAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const nfc          = s => s.normalize('NFC');
+const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Normalise espaces autour des apostrophes : "d' Hauteville" → "d Hauteville"
+const normalizeApo = s => s.replace(/\s*'\s*/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
 // Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)
 function toSoslTokens(name) {
-  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
+  return normalizeApo(stripAcc(nfc(name)).toLowerCase()).replace(/-/g, ' ').trim();
 }
 
 function buildContactSosl(persons) {
@@ -36,7 +38,7 @@ function mapContacts(sfContacts, personNames) {
   for (const contact of sfContacts) {
     if (!contact.Name) continue;
     const matched = personNames.find(name => {
-      const a = stripAcc(nfc(name)).toLowerCase(), b = stripAcc(nfc(contact.Name)).toLowerCase();
+      const a = normalizeApo(stripAcc(nfc(name)).toLowerCase()), b = normalizeApo(stripAcc(nfc(contact.Name)).toLowerCase());
       return b.includes(a) || a.includes(b);
     });
     if (!matched) continue;
@@ -79,7 +81,7 @@ function mapAccounts(sfAccounts, orgNames) {
   for (const account of sfAccounts) {
     if (!account.Name) continue;
     const matched = orgNames.find(name => {
-      const a = stripAcc(nfc(name)).toLowerCase(), b = stripAcc(nfc(account.Name)).toLowerCase();
+      const a = normalizeApo(stripAcc(nfc(name)).toLowerCase()), b = normalizeApo(stripAcc(nfc(account.Name)).toLowerCase());
       return b.includes(a) || a.includes(b);
     });
     if (!matched) continue;
