@@ -11,7 +11,7 @@ const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 // Normalise espaces autour des apostrophes : "d' Hauteville" → "d Hauteville"
-const normalizeApo = s => s.replace(/\s*'\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const normalizeApo = s => s.replace(/\s*['']\s*/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
 // Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)

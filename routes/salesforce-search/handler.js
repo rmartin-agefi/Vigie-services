@@ -6,7 +6,7 @@ const router = Router();
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 // Normalise espaces autour des apostrophes : "d' Hauteville" → "d Hauteville"
-const normalizeApo = s => s.replace(/\s*'\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const normalizeApo = s => s.replace(/\s*['’]\s*/g, ' ').replace(/\s+/g, ' ').trim();
 const toSoslTokens = name => stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
 const escapeLike   = v => escapeSoql(v).replace(/%/g, '\\%');
 
