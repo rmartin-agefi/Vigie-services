@@ -54,20 +54,17 @@ router.get('/', async (req, res) => {
     return res.status(500).json({ error: 'SURFE_API_KEY non configuré' });
   }
 
-  // Vérification quota journalier (skip en dev bypass)
+  // Vérification + réservation quota journalier (skip en dev bypass)
   const email = req.user?.email;
   if (!req.user?.authBypass && email) {
-    try {
-      const perms = await getUserPermissions(email); // déjà cachée par requirePermission
-      const quota = await checkQuota(email, perms.surfeLimit);
-      if (!quota.allowed) {
-        console.warn(`[surfe-search] Quota dépassé (${email}) — ${quota.used}/${quota.limit}`);
-        return res.status(429).json({ error: 'daily_limit_reached', used: quota.used, limit: quota.limit });
-      }
-    } catch (err) {
-      console.error('[surfe-search] Erreur quota check:', err.message);
-      // En cas d'erreur quota, on laisse passer (fail open)
+    const perms = await getUserPermissions(email); // déjà cachée par requirePermission
+    const quota = await checkQuota(email, perms.surfeLimit);
+    if (!quota.allowed) {
+      console.warn(`[surfe-search] Quota dépassé (${email}) — ${quota.used}/${quota.limit}`);
+      return res.status(429).json({ error: 'daily_limit_reached', used: quota.used, limit: quota.limit });
     }
+    await incrementUsage(email); // réserve le slot avant d'appeler Surfe — si ça échoue, on bloque
+    console.log(`[surfe-search] Slot réservé (${email}) — ${quota.used + 1}/${quota.limit}`);
   }
 
   try {
@@ -115,9 +112,6 @@ router.get('/', async (req, res) => {
     const credits = creditsRes?.ok ? await creditsRes.json().catch(() => null) : null;
 
     if (emailEntry?.validationStatus === 'VALID') {
-      if (!req.user?.authBypass && email) {
-        incrementUsage(email).catch(err => console.error('[surfe-quota] Erreur increment:', err.message));
-      }
       return res.json({ email: emailEntry.email, credits });
     }
 
