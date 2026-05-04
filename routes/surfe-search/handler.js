@@ -57,14 +57,19 @@ router.get('/', async (req, res) => {
   // Vérification + réservation quota journalier (skip en dev bypass)
   const email = req.user?.email;
   if (!req.user?.authBypass && email) {
-    const perms = await getUserPermissions(email); // déjà cachée par requirePermission
-    const quota = await checkQuota(email, perms.surfeLimit);
-    if (!quota.allowed) {
-      console.warn(`[surfe-search] Quota dépassé (${email}) — ${quota.used}/${quota.limit}`);
-      return res.status(429).json({ error: 'daily_limit_reached', used: quota.used, limit: quota.limit });
+    try {
+      const perms = await getUserPermissions(email); // déjà cachée par requirePermission
+      const quota = await checkQuota(email, perms.surfeLimit);
+      if (!quota.allowed) {
+        console.warn(`[surfe-search] Quota dépassé (${email}) — ${quota.used}/${quota.limit}`);
+        return res.status(429).json({ error: 'daily_limit_reached', used: quota.used, limit: quota.limit });
+      }
+      await incrementUsage(email); // réserve le slot avant d'appeler Surfe — si ça échoue, on bloque
+      console.log(`[surfe-search] Slot réservé (${email}) — ${quota.used + 1}/${quota.limit}`);
+    } catch (err) {
+      console.error('[surfe-search] Erreur quota:', err.message);
+      return res.status(503).json({ error: 'Service de quota indisponible' });
     }
-    await incrementUsage(email); // réserve le slot avant d'appeler Surfe — si ça échoue, on bloque
-    console.log(`[surfe-search] Slot réservé (${email}) — ${quota.used + 1}/${quota.limit}`);
   }
 
   try {
