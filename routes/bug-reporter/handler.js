@@ -13,6 +13,7 @@ const CLICKUP_ASSIGNEE = () => {
 
 const SEVERITY_LABEL    = { blocking: '🚨 Bloquant', annoying: '⚠️ Gênant', minor: 'Mineur' };
 const SEVERITY_PRIORITY = { blocking: 1, annoying: 2, minor: 3 };
+const CLICKUP_BUG_ITEM_ID = 1002;
 
 function getFriendlySource(url) {
   try {
@@ -112,10 +113,11 @@ router.post('/', async (req, res) => {
     // 2. Créer la sous-tâche
     const assignees = CLICKUP_ASSIGNEE();
     console.log('[bug-reporter] assignees:', assignees);
+    const taskBody = { name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees, status: 'A FAIRE', custom_item_id: CLICKUP_BUG_ITEM_ID };
     const taskRes = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
       method: 'POST',
       headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: taskName, markdown_description: description, parent: parent.id, priority: SEVERITY_PRIORITY[severity] ?? 3, assignees, status: 'A FAIRE', custom_type: 'Bug' }),
+      body: JSON.stringify(taskBody),
     });
     if (!taskRes.ok) {
       const err = await taskRes.text();
