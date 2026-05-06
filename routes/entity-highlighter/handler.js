@@ -27,10 +27,12 @@ function buildContactSosl(persons) {
 }
 
 function buildAccountSosl(organizations) {
-  const terms = organizations.slice(0, 15)
+  const terms = organizations.slice(0, 20)
     .map(name => escapeSosl(toSoslTokens(name)))
     .join(' OR ');
-  return `FIND {${terms}} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS}) LIMIT 30`;
+  const sosl = `FIND {${terms}} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS} LIMIT 200)`;
+  console.log('[entity-highlighter] SOSL accounts query:', sosl);
+  return sosl;
 }
 
 function mapContacts(sfContacts, personNames) {
@@ -149,6 +151,9 @@ router.post('/', async (req, res) => {
     console.error('[entity-highlighter] SOSL contacts error:', contactsResult.reason?.message);
   if (accountsResult.status === 'rejected')
     console.error('[entity-highlighter] SOSL accounts error:', accountsResult.reason?.message);
+
+  console.log('[entity-highlighter] orgs cherchées:', organizations);
+  console.log('[entity-highlighter] sfAccounts bruts (count):', sfAccounts.length, sfAccounts.map(a => a.Name));
 
   // 3. Mapping des résultats SF
   const salesforce        = mapContacts(sfContacts, persons);
