@@ -116,8 +116,8 @@ router.get('/', async (req, res) => {
     }).catch(() => null);
     const credits = creditsRes?.ok ? await creditsRes.json().catch(() => null) : null;
 
-    if (emailEntry?.validationStatus === 'VALID') {
-      return res.json({ email: emailEntry.email, credits });
+    if (emailEntry?.email && emailEntry?.validationStatus !== 'INVALID') {
+      return res.json({ email: emailEntry.email, validationStatus: emailEntry.validationStatus, credits });
     }
 
     return res.status(204).send();
