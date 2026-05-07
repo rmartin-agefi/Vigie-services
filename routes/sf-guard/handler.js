@@ -14,74 +14,70 @@ const FR_PARTICLES = new Set(['de', 'du', 'des', 'le', 'la', 'les', 'd', 'l', 'e
 
 function normalize(s) {
   return String(s || '')
+    // Ligatures non décomposées par NFD
+    .replace(/[Œœ]/g, 'oe')  // Œœ
+    .replace(/[Ææ]/g, 'ae')  // Ææ
+    // NFD + suppression tous diacritiques (accents, tréma, cédille, ogonek…)
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[-''']/g, ' ')
+    // Toutes variantes apostrophes : droite, courbes, typographiques, modificateurs
+    .replace(/['‘’‚‛ʼ`´]/g, ' ')
+    // Tous types de tirets et tirets cadratins
+    .replace(/[-‐‑‒–—―−]/g, ' ')
+    // Espaces non-standards (insécable, idéographique, etc.)
+    .replace(/[   -   　]/g, ' ')
+    // Supprimer tout ce qui reste hors alphanum + espace
+    .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function toSoslTokens(name) {
-  const tokens = normalize(name)
-    .replace(/[^a-z0-9\s]/g, '')
+function significantTokens(name) {
+  return normalize(name)
     .split(' ')
     .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
+}
 
-  // Tokens déjà [a-z0-9] après normalize — pas besoin d'escapeSosl
-  // * = wildcard prefix (supporté REST), OR = au moins 1 token suffit
-  return tokens
-    .map(t => t.length >= 4 ? `${t}*` : t)
-    .join(' OR ');
+function toSoslTokens(name) {
+  const tokens = significantTokens(name);
+  // OR : 1 seul token suffit → "raphael OR michentef" remonte "Alexandre Michentef"
+  // SF search index gère accents/casse nativement
+  return tokens.join(' OR ');
 }
 
 // ── Scoring ───────────────────────────────────────────────────
 
-function significantTokens(name) {
-  return normalize(name)
-    .replace(/[^a-z0-9\s]/g, '')
-    .split(' ')
-    .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i;
+    for (let j = 1; j <= b.length; j++) {
+      const val = a[i-1] === b[j-1] ? dp[j-1] : Math.min(dp[j-1], dp[j], prev) + 1;
+      dp[j-1] = prev;
+      prev = val;
+    }
+    dp[b.length] = prev;
+  }
+  return dp[b.length];
 }
 
 function scoreName(candidateName, searchName) {
   const a = significantTokens(candidateName);
   const b = significantTokens(searchName);
   if (!a.length || !b.length) return 0;
-
-  // Exact après normalisation
   if (a.join(' ') === b.join(' ')) return 100;
-
-  // Combien de tokens de b sont présents dans a (exact ou 1 char off)
-  const matchingTokens = b.filter(bt =>
-    a.some(at => at === bt || levenshtein(at, bt) <= 1)
-  );
+  const matchingTokens = b.filter(bt => a.some(at => at === bt || levenshtein(at, bt) <= 1));
   const matches = matchingTokens.length;
-
   if (matches === b.length) return 85;
   if (matches > 0) {
     const base = Math.round((matches / b.length) * 60);
-    // Token long (≥5 chars) qui matche = nom de famille rare → score minimum 50
-    const hasRareMatch = matchingTokens.some(t => t.length >= 5);
-    return hasRareMatch ? Math.max(base, 50) : base;
+    // Token long (≥5 chars) qui matche = nom de famille rare → score min 50
+    return matchingTokens.some(t => t.length >= 5) ? Math.max(base, 50) : base;
   }
   return 0;
-}
-
-function levenshtein(a, b) {
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const dp = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = i;
-    for (let j = 1; j <= b.length; j++) {
-      const val = a[i - 1] === b[j - 1] ? dp[j - 1] : Math.min(dp[j - 1], dp[j], prev) + 1;
-      dp[j - 1] = prev;
-      prev = val;
-    }
-    dp[b.length] = prev;
-  }
-  return dp[b.length];
 }
 
 function scoreCompany(candidateCompany, detectedCompanies) {
@@ -123,15 +119,15 @@ router.post('/search', async (req, res) => {
   if (!soslTokens) return res.status(400).json({ error: 'Nom invalide' });
 
   try {
-    let rawRecords = [];
-
+    let sosl;
     if (type === 'person') {
-      const sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT 10), Lead(${GUARD_LEAD_FIELDS} LIMIT 10)`;
-      rawRecords = await soslSearch(sosl);
+      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT 10), Lead(${GUARD_LEAD_FIELDS} LIMIT 10)`;
     } else {
-      const sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT 10)`;
-      rawRecords = await soslSearch(sosl);
+      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT 10)`;
     }
+    console.log('[sf-guard] SOSL:', sosl);
+    const rawRecords = await soslSearch(sosl);
+    console.log('[sf-guard] rawRecords:', rawRecords.length);
 
     const candidates = [];
 
@@ -141,9 +137,13 @@ router.post('/search', async (req, res) => {
       const candidateCompany = sfType === 'Lead' ? (r.Company || '') : (r.Account?.Name || '');
       const nameScore        = scoreName(candidateName, name);
       const companyScore     = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
-      const score            = type === 'person'
-        ? Math.round(nameScore * 0.55 + companyScore * 0.45)
-        : nameScore;
+      // Sans entreprise détectée → score = nom seul (pas de pénalité pour info absente)
+      // Avec entreprise → pondération nom 55% + entreprise 45%
+      const score = type !== 'person'
+        ? nameScore
+        : detectedCompanies.length > 0
+          ? Math.round(nameScore * 0.55 + companyScore * 0.45)
+          : nameScore;
 
       if (score < 30) continue;
 
@@ -168,7 +168,7 @@ router.post('/search', async (req, res) => {
     console.log(`[sf-guard] ${type} "${name}" → ${status} (${top.length} candidats)`);
 
     return res.json({
-      requestId: `sfguard_${Date.now()}`,
+      requestId:   `sfguard_${Date.now()}`,
       status,
       blocking:    false,
       blockReason: null,
