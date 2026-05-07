@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { soslSearch, escapeSosl } from '../../lib/salesforce.js';
+import { soslSearch } from '../../lib/salesforce.js';
 
 const router = Router();
 
@@ -27,10 +27,10 @@ function toSoslTokens(name) {
     .split(' ')
     .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
 
-  // escapeSosl AVANT d'ajouter ~  (escapeSosl échappe ~ en \~, ce qui casserait le fuzzy)
-  // OR entre les tokens : "raphael OR michentef" remonte "Alexandre Michentef"
+  // Tokens déjà [a-z0-9] après normalize — pas besoin d'escapeSosl
+  // * = wildcard prefix (supporté REST), OR = au moins 1 token suffit
   return tokens
-    .map(t => `${escapeSosl(t)}${t.length >= 4 ? '~' : ''}`)
+    .map(t => t.length >= 4 ? `${t}*` : t)
     .join(' OR ');
 }
 
