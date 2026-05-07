@@ -27,8 +27,11 @@ function toSoslTokens(name) {
     .split(' ')
     .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
 
-  // Fuzzy (~) sur les tokens de 4+ caractères, exact sur les courts
-  return tokens.map(t => t.length >= 4 ? `${t}~` : t).join(' ');
+  // escapeSosl AVANT d'ajouter ~  (escapeSosl échappe ~ en \~, ce qui casserait le fuzzy)
+  // OR entre les tokens : "raphael OR michentef" remonte "Alexandre Michentef"
+  return tokens
+    .map(t => `${escapeSosl(t)}${t.length >= 4 ? '~' : ''}`)
+    .join(' OR ');
 }
 
 // ── Scoring ───────────────────────────────────────────────────
@@ -49,12 +52,18 @@ function scoreName(candidateName, searchName) {
   if (a.join(' ') === b.join(' ')) return 100;
 
   // Combien de tokens de b sont présents dans a (exact ou 1 char off)
-  const matches = b.filter(bt =>
+  const matchingTokens = b.filter(bt =>
     a.some(at => at === bt || levenshtein(at, bt) <= 1)
-  ).length;
+  );
+  const matches = matchingTokens.length;
 
   if (matches === b.length) return 85;
-  if (matches > 0) return Math.round((matches / b.length) * 60);
+  if (matches > 0) {
+    const base = Math.round((matches / b.length) * 60);
+    // Token long (≥5 chars) qui matche = nom de famille rare → score minimum 50
+    const hasRareMatch = matchingTokens.some(t => t.length >= 5);
+    return hasRareMatch ? Math.max(base, 50) : base;
+  }
   return 0;
 }
 
@@ -117,10 +126,10 @@ router.post('/search', async (req, res) => {
     let rawRecords = [];
 
     if (type === 'person') {
-      const sosl = `FIND {${escapeSosl(soslTokens)}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT 10), Lead(${GUARD_LEAD_FIELDS} LIMIT 10)`;
+      const sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT 10), Lead(${GUARD_LEAD_FIELDS} LIMIT 10)`;
       rawRecords = await soslSearch(sosl);
     } else {
-      const sosl = `FIND {${escapeSosl(soslTokens)}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT 10)`;
+      const sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT 10)`;
       rawRecords = await soslSearch(sosl);
     }
 
