@@ -21,6 +21,8 @@ const ROUTE_PERMISSIONS = {
   'salesforce-search-link': 'linkedin',
   'piano-check-agefi':      'linkedin',
   'piano-check-opinion':    'linkedin',
+  'sf-guard':               ['eh', 'alpha', 'linkedin'],
+  'sf':                     ['eh', 'alpha', 'linkedin'],
   'refresh-cache':          null,
   'bug-reporter':           null,
 };
