@@ -88,6 +88,7 @@ function mapAccounts(sfAccounts, orgNames) {
     });
     if (!matched) continue;
     if (!result[matched]) result[matched] = [];
+    if (result[matched].length >= 20) continue;
     result[matched].push({
       id:          account.Id,
       name:        account.Name,
