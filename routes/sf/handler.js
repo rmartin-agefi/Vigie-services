@@ -16,8 +16,8 @@ const CONTACT_FETCH_FIELDS = [
 const ACCOUNT_FETCH_FIELDS = [
   'Id', 'Name', 'BillingCountry', 'BillingCity',
   'Secteur_activite_principal__c', 'Etat__c',
-  'OwnerId', 'R_f_ren_commercial_abonnements__c',
-  'Website', 'Phone',
+  'OwnerId', 'Owner.Name',
+  'R_f_ren_commercial_abonnements__c', 'R_f_ren_commercial_abonnements__r.Name',
 ].join(', ');
 
 // GET /webhook/sf/accounts?q=... — autocomplete comptes
@@ -89,16 +89,16 @@ router.get('/account/:id', async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Compte non trouvé' });
     const r = rows[0];
-    console.log('[sf/account] OK:', r.Name, '| Etat:', r.Etat__c, '| Ville:', r.BillingCity);
+    console.log('[sf/account] OK:', r.Name, '| Etat:', r.Etat__c, '| Owner:', r.Owner?.Name, '| Référent abo:', r['R_f_ren_commercial_abonnements__r']?.Name);
     return res.json({
-      id:      r.Id,
-      name:    r.Name     || '',
-      city:    r.BillingCity    || '',
-      country: r.BillingCountry || '',
-      sector:  r.Secteur_activite_principal__c || '',
-      etat:    r.Etat__c  || '',
-      website: r.Website  || '',
-      phone:   r.Phone    || '',
+      id:                    r.Id,
+      name:                  r.Name     || '',
+      city:                  r.BillingCity    || '',
+      country:               r.BillingCountry || '',
+      sector:                r.Secteur_activite_principal__c || '',
+      etat:                  r.Etat__c  || '',
+      ownerName:             r.Owner?.Name || '',
+      referentAbonnementName: r['R_f_ren_commercial_abonnements__r']?.Name || '',
     });
   } catch (err) {
     console.error('[sf/account] Erreur:', err.message);
