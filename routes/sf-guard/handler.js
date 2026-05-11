@@ -7,7 +7,7 @@ const SF_BASE              = 'https://agefi.lightning.force.com';
 const GUARD_CONTACT_FIELDS = 'Id, FirstName, LastName, Name, Titre_exact_op__c, Fonction_Niveau_1__c, Email, Account.Name, lien_linkedin_indiv__c';
 const GUARD_LEAD_FIELDS    = 'Id, FirstName, LastName, Name, Title, Email, Company';
 const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website';
-const CONTACT_LIMIT = 30;
+const CONTACT_LIMIT = 50;
 const LEAD_LIMIT    = 10;
 const ACCOUNT_LIMIT = 15;
 
@@ -41,11 +41,15 @@ function significantTokens(name) {
     .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
 }
 
-function toSoslTokens(name) {
+function toSoslTokens(name, type) {
   const tokens = significantTokens(name);
-  // OR : 1 seul token suffit pour remonter le record → typos dans l'article gérées par Levenshtein
-  // Ex: "jean OR baptiste OR gratieaux" remonte "Graftieaux" via jean+baptiste, Levenshtein le score à 85
-  // SF search index gère accents/casse nativement
+  if (!tokens.length) return '';
+  // Pour les personnes : chercher uniquement par le dernier token (nom de famille, plus distinctif)
+  // Les prénoms (Jean, Marie, Pierre...) sont trop communs → trop de bruit si inclus dans SOSL
+  // Le scoring Levenshtein filtre ensuite sur le nom complet
+  if (type === 'person' && tokens.length >= 2) {
+    return tokens[tokens.length - 1];
+  }
   return tokens.join(' OR ');
 }
 
@@ -119,7 +123,7 @@ router.post('/search', async (req, res) => {
   const { type, name, detectedCompanies = [] } = req.body;
   if (!name) return res.status(400).json({ error: 'name requis' });
 
-  const soslTokens = toSoslTokens(name);
+  const soslTokens = toSoslTokens(name, type);
   if (!soslTokens) return res.status(400).json({ error: 'Nom invalide' });
 
   try {
@@ -131,7 +135,7 @@ router.post('/search', async (req, res) => {
     }
     console.log('[sf-guard] SOSL:', sosl);
     const rawRecords = await soslSearch(sosl);
-    console.log('[sf-guard] rawRecords:', rawRecords.length);
+    console.log('[sf-guard] rawRecords:', rawRecords.length, '→', rawRecords.map(r => r.Name || `${r.FirstName} ${r.LastName}`).join(' | '));
 
     const candidates = [];
 
@@ -153,6 +157,8 @@ router.post('/search', async (req, res) => {
         salesforceId:  r.Id,
         type:          sfType,
         name:          candidateName,
+        firstName:     r.FirstName  || '',
+        lastName:      r.LastName   || '',
         title:         r.Titre_exact_op__c || r.Fonction_Niveau_1__c || r.Title || '',
         company:       candidateCompany,
         email:         r.Email || null,
@@ -163,7 +169,7 @@ router.post('/search', async (req, res) => {
     }
 
     candidates.sort((a, b) => b.score - a.score);
-    const top    = candidates.slice(0, 5);
+    const top    = candidates.slice(0, 8);
     const best   = top[0]?.score ?? 0;
     const status = best >= 85 ? 'match_strong' : best >= 50 ? 'match_possible' : 'no_match';
 
