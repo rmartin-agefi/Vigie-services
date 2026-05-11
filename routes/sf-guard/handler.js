@@ -40,7 +40,8 @@ function significantTokens(name) {
 
 function toSoslTokens(name) {
   const tokens = significantTokens(name);
-  // OR : 1 seul token suffit → "raphael OR michentef" remonte "Alexandre Michentef"
+  // OR : 1 seul token suffit pour remonter le record → typos dans l'article gérées par Levenshtein
+  // Ex: "jean OR baptiste OR gratieaux" remonte "Graftieaux" via jean+baptiste, Levenshtein le score à 85
   // SF search index gère accents/casse nativement
   return tokens.join(' OR ');
 }
@@ -145,7 +146,8 @@ router.post('/search', async (req, res) => {
           ? Math.round(nameScore * 0.55 + companyScore * 0.45)
           : nameScore;
 
-      if (score < 30) continue;
+      const minScore = type === 'person' ? 45 : 30;
+      if (score < minScore) continue;
 
       candidates.push({
         salesforceId:  r.Id,
