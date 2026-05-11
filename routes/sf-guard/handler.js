@@ -138,13 +138,10 @@ router.post('/search', async (req, res) => {
       const candidateCompany = sfType === 'Lead' ? (r.Company || '') : (r.Account?.Name || '');
       const nameScore        = scoreName(candidateName, name);
       const companyScore     = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
-      // Sans entreprise détectée → score = nom seul (pas de pénalité pour info absente)
-      // Avec entreprise → pondération nom 55% + entreprise 45%
-      const score = type !== 'person'
-        ? nameScore
-        : detectedCompanies.length > 0
-          ? Math.round(nameScore * 0.55 + companyScore * 0.45)
-          : nameScore;
+      // Entreprise = bonus uniquement (jamais une pénalité si absente ou mauvaise)
+      // nameScore est la base, companyScore peut ajouter jusqu'à 15 pts
+      const companyBonus = type === 'person' && companyScore > 0 ? Math.round(companyScore * 0.15) : 0;
+      const score = type !== 'person' ? nameScore : Math.min(100, nameScore + companyBonus);
 
       const minScore = type === 'person' ? 45 : 30;
       if (score < minScore) continue;
