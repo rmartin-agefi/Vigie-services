@@ -7,6 +7,9 @@ const SF_BASE              = 'https://agefi.lightning.force.com';
 const GUARD_CONTACT_FIELDS = 'Id, FirstName, LastName, Name, Titre_exact_op__c, Fonction_Niveau_1__c, Email, Account.Name, lien_linkedin_indiv__c';
 const GUARD_LEAD_FIELDS    = 'Id, FirstName, LastName, Name, Title, Email, Company';
 const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website';
+const CONTACT_LIMIT = 30;
+const LEAD_LIMIT    = 10;
+const ACCOUNT_LIMIT = 15;
 
 // ── Normalisation ─────────────────────────────────────────────
 
@@ -122,9 +125,9 @@ router.post('/search', async (req, res) => {
   try {
     let sosl;
     if (type === 'person') {
-      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT 10), Lead(${GUARD_LEAD_FIELDS} LIMIT 10)`;
+      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT}), Lead(${GUARD_LEAD_FIELDS} LIMIT ${LEAD_LIMIT})`;
     } else {
-      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT 10)`;
+      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
     }
     console.log('[sf-guard] SOSL:', sosl);
     const rawRecords = await soslSearch(sosl);
