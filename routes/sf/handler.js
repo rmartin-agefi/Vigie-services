@@ -20,22 +20,24 @@ const ACCOUNT_FETCH_FIELDS = [
   'R_f_ren_commercial_abonnements__c', 'R_f_ren_commercial_abonnements__r.Name',
 ].join(', ');
 
-// GET /webhook/sf/accounts?q=... — autocomplete comptes
+// GET /webhook/sf/accounts?q=...&limit=15 — autocomplete comptes
 router.get('/accounts', async (req, res) => {
-  const q = (req.query.q || '').trim();
+  const q     = (req.query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 15, 1), 200);
   if (q.length < 2) return res.json([]);
 
   const normalized = q.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const term = escapeSosl(normalized);
-  const sosl = `FIND {${term}*} IN NAME FIELDS RETURNING Account(Id, Name, ParentId, Parent.Name, Etat__c LIMIT 15)`;
+  const sosl = `FIND {${term}*} IN NAME FIELDS RETURNING Account(Id, Name, ParentId, Parent.Name, Etat__c LIMIT ${limit})`;
 
   try {
     const records = await soslSearch(sosl);
     const results = records.map(r => ({
       id:         r.Id,
       name:       r.Name,
-      parentName: r.Parent?.Name || null,
-      etat:       r.Etat__c     || null,
+      parentId:   r.ParentId      || null,
+      parentName: r.Parent?.Name  || null,
+      etat:       r.Etat__c       || null,
     }));
     return res.json(results);
   } catch (err) {
