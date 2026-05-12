@@ -5,10 +5,8 @@ const router = Router();
 
 const SF_BASE              = 'https://agefi.lightning.force.com';
 const GUARD_CONTACT_FIELDS = 'Id, FirstName, LastName, Name, Titre_exact_op__c, Fonction_Niveau_1__c, Email, Account.Name, lien_linkedin_indiv__c';
-const GUARD_LEAD_FIELDS    = 'Id, FirstName, LastName, Name, Title, Email, Company';
 const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website';
 const CONTACT_LIMIT = 50;
-const LEAD_LIMIT    = 10;
 const ACCOUNT_LIMIT = 15;
 
 // ── Normalisation ─────────────────────────────────────────────
@@ -129,7 +127,7 @@ router.post('/search', async (req, res) => {
   try {
     let sosl;
     if (type === 'person') {
-      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT}), Lead(${GUARD_LEAD_FIELDS} LIMIT ${LEAD_LIMIT})`;
+      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`;
     } else {
       sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
     }
