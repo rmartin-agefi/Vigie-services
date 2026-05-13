@@ -1,7 +1,7 @@
 // node --env-file=.env test-accounts.js [query]
 import { soqlQuery, soslSearch, escapeSoql } from './lib/salesforce.js';
 
-const q = process.argv[2] || 'BNP';
+const q = process.argv[2] || 'Groupe Sigma Gestion';
 
 // 1. SOSL sur les accounts
 const sosl = `FIND {${q}*} IN NAME FIELDS RETURNING Account(Id, Name, ParentId, Parent.Name LIMIT 20)`;

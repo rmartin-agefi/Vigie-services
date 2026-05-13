@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { soslSearch, soqlQuery, escapeSosl, escapeSoql } from '../../lib/salesforce.js';
+import { soslSearch, soqlQuery, escapeSosl, escapeSoql, createRecord, updateRecord, getUserIdByEmail } from '../../lib/salesforce.js';
+import { requirePermission } from '../../middleware/permissions.js';
 
 const router = Router();
+const SF_DRY_RUN = process.env.SF_DRY_RUN === 'true';
 
 const CONTACT_FETCH_FIELDS = [
   'Id', 'Salutation', 'FirstName', 'MiddleName', 'LastName',
@@ -108,16 +110,87 @@ router.get('/account/:id', async (req, res) => {
   }
 });
 
-// POST /webhook/sf/create — à implémenter (étape suivante)
-router.post('/create', async (req, res) => {
-  console.log('[sf/create] payload reçu:', JSON.stringify(req.body));
-  return res.status(501).json({ error: 'Non implémenté' });
+// POST /webhook/sf/create — création Account ou Contact
+router.post('/create', requirePermission('eh', 'alpha'), async (req, res) => {
+  const { type, name, sector, billingCity, billingCountry, etat, ownerEmail, referentEmail } = req.body;
+  console.log('[sf/create] type:', type, '| name:', name, '| owner:', ownerEmail);
+
+  if (!name?.trim()) {
+    return res.status(400).json({ success: false, error: 'Le nom est obligatoire' });
+  }
+
+  try {
+    if (type === 'account') {
+      const [ownerId, referentId] = await Promise.all([
+        getUserIdByEmail(ownerEmail),
+        getUserIdByEmail(referentEmail),
+      ]);
+
+      if (ownerEmail && !ownerId) {
+        console.warn('[sf/create] OwnerId non trouvé pour:', ownerEmail);
+      }
+
+      const fields = {
+        Name: name.trim(),
+        ...(sector         && { Secteur_activite_principal__c:       sector }),
+        ...(billingCity    && { BillingCity:                         billingCity }),
+        ...(billingCountry && { BillingCountry:                      billingCountry }),
+        ...(etat           && { Etat__c:                             etat }),
+        ...(ownerId        && { OwnerId:                             ownerId }),
+        ...(referentId     && { R_f_ren_commercial_abonnements__c:   referentId }),
+      };
+
+      console.log('[sf/create] Account fields:', JSON.stringify(fields));
+      if (SF_DRY_RUN) {
+        console.log('[sf/create] 🧪 DRY RUN — aucune création Salesforce');
+        return res.json({ success: true, accountId: 'DRY_RUN_' + Date.now() });
+      }
+      const result = await createRecord('Account', fields);
+      console.log('[sf/create] Account créé:', result.id);
+      return res.json({ success: true, accountId: result.id });
+
+    } else {
+      return res.status(501).json({ success: false, error: 'Création contact non encore implémentée' });
+    }
+  } catch (err) {
+    console.error('[sf/create] Erreur:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// POST /webhook/sf/update — à implémenter (étape suivante)
-router.post('/update', async (req, res) => {
-  console.log('[sf/update] payload reçu:', JSON.stringify(req.body));
-  return res.status(501).json({ error: 'Non implémenté' });
+// POST /webhook/sf/update — mise à jour Account ou Contact
+router.post('/update', requirePermission('eh', 'alpha'), async (req, res) => {
+  const { salesforceId, type, name, sector, billingCity, billingCountry, etat, ownerEmail, referentEmail } = req.body;
+  console.log('[sf/update] type:', type, '| id:', salesforceId);
+
+  if (!salesforceId) {
+    return res.status(400).json({ success: false, error: 'salesforceId est obligatoire' });
+  }
+
+  try {
+    if (type === 'Account') {
+      const referentId = await getUserIdByEmail(referentEmail);
+
+      const fields = {
+        ...(name           && { Name:                                name.trim() }),
+        ...(sector         && { Secteur_activite_principal__c:       sector }),
+        ...(billingCity    && { BillingCity:                         billingCity }),
+        ...(billingCountry && { BillingCountry:                      billingCountry }),
+        ...(etat           && { Etat__c:                             etat }),
+        ...(referentId     && { R_f_ren_commercial_abonnements__c:   referentId }),
+      };
+
+      console.log('[sf/update] Account fields:', JSON.stringify(fields));
+      await updateRecord('Account', salesforceId, fields);
+      return res.json({ success: true });
+
+    } else {
+      return res.status(501).json({ success: false, error: 'Mise à jour contact non encore implémentée' });
+    }
+  } catch (err) {
+    console.error('[sf/update] Erreur:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 export default router;

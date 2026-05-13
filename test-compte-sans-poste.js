@@ -1,7 +1,7 @@
 // test-compte-sans-poste.js — node --env-file=.env test-compte-sans-poste.js
 import { soqlQuery } from './lib/salesforce.js';
 
-const records = await soqlQuery(`SELECT Id, Name, Etat__c FROM Account WHERE Name = 'Compte pour contact sans poste' LIMIT 5`);
+const records = await soqlQuery(`SELECT Id, Name, Etat__c FROM Account WHERE Name = 'ynsect' LIMIT 5`);
 
 if (!records.length) {
   console.log('Aucun compte trouvé.');
