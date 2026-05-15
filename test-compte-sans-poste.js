@@ -1,7 +1,7 @@
 // test-compte-sans-poste.js — node --env-file=.env test-compte-sans-poste.js
 import { soqlQuery } from './lib/salesforce.js';
 
-const records = await soqlQuery(`SELECT Id, Name, Etat__c FROM Account WHERE Name = 'ynsect' LIMIT 5`);
+const records = await soqlQuery(`SELECT Id, Name, Etat__c, Raison_sociale__c, Sigle__c, Historique_RS__c  FROM Account WHERE Name = 'Institut National de la Statistique et des Etudes Economiques' LIMIT 5`);
 
 if (!records.length) {
   console.log('Aucun compte trouvé.');
@@ -9,6 +9,9 @@ if (!records.length) {
   records.forEach(r => {
     console.log(`Id    : ${r.Id}`);
     console.log(`Nom   : ${r.Name}`);
+    console.log(`Raison sociale  : ${r.Raison_sociale__c}`);
+    console.log(`Sigle  : ${r.Sigle__c}`);
+    console.log(`Historique RS  : ${r.Historique_RS__c}`);
     console.log(`État  : ${r.Etat__c}`);
     console.log('---');
   });

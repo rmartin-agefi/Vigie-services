@@ -6,7 +6,7 @@ import { soslSearch, escapeSosl, CONTACT_FIELDS } from '../../lib/salesforce.js'
 const router = Router();
 
 const CONTACT_SOSL_FIELDS = CONTACT_FIELDS;
-const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership, Pictos_compte__c, OwnerId, Owner.Name';
+const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership, Pictos_compte__c, OwnerId, Owner.Name, Sigle__c, Raison_sociale__c';
 
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -19,20 +19,14 @@ function toSoslTokens(name) {
   return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').trim();
 }
 
-function buildContactSosl(persons) {
-  const terms = persons.slice(0, 20)
-    .map(name => escapeSosl(toSoslTokens(name)))
-    .join(' OR ');
-  return `FIND {${terms}} IN NAME FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS}) LIMIT 50`;
-}
-
-function buildAccountSosl(organizations) {
-  const terms = organizations.slice(0, 20)
-    .map(name => escapeSosl(toSoslTokens(name)))
-    .join(' OR ');
-  const sosl = `FIND {${terms}} IN NAME FIELDS RETURNING Account(${ACCOUNT_SOSL_FIELDS} LIMIT 200)`;
-  console.log('[entity-highlighter] SOSL accounts query:', sosl);
-  return sosl;
+// Une seule requête SOSL IN ALL FIELDS : couvre Name, Sigle__c, Raison_sociale__c
+// Contact + Account dans le même FIND — séparation faite côté mapping (persons vs organizations)
+function buildCombinedSosl(persons, organizations) {
+  const terms = [
+    ...persons.slice(0, 15).map(name => escapeSosl(toSoslTokens(name))),
+    ...organizations.slice(0, 15).map(name => escapeSosl(toSoslTokens(name))),
+  ].filter(Boolean).join(' OR ');
+  return `FIND {${terms}} IN ALL FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS} LIMIT 50), Account(${ACCOUNT_SOSL_FIELDS} LIMIT 200)`;
 }
 
 function mapContacts(sfContacts, personNames) {
@@ -78,6 +72,20 @@ function mapContacts(sfContacts, personNames) {
   return result;
 }
 
+function _accountToRecord(account) {
+  return {
+    id:          account.Id,
+    name:        account.Name,
+    website:     account.Website     || '',
+    industry:    account.Industry    || '',
+    description: account.Description || '',
+    ownership:   account.Ownership   || '',
+    pictos:      account.Pictos_compte__c || '',
+    owner:       account.Owner?.Name || '',
+    ownerId:     account.OwnerId,
+  };
+}
+
 function mapAccounts(sfAccounts, orgNames) {
   const result = {};
   for (const account of sfAccounts) {
@@ -89,17 +97,27 @@ function mapAccounts(sfAccounts, orgNames) {
     if (!matched) continue;
     if (!result[matched]) result[matched] = [];
     if (result[matched].length >= 20) continue;
-    result[matched].push({
-      id:          account.Id,
-      name:        account.Name,
-      website:     account.Website     || '',
-      industry:    account.Industry    || '',
-      description: account.Description || '',
-      ownership:   account.Ownership   || '',
-      pictos:      account.Pictos_compte__c || '',
-      owner:       account.Owner?.Name || '',
-      ownerId:     account.OwnerId,
+    result[matched].push(_accountToRecord(account));
+  }
+  return result;
+}
+
+// Mappe les résultats SOQL (match via Sigle__c ou Raison_sociale__c)
+function mapAccountsAlt(sfAccounts, orgNames) {
+  const result = {};
+  for (const account of sfAccounts) {
+    const sigle  = account.Sigle__c          || '';
+    const raison = account.Raison_sociale__c  || '';
+    const matched = orgNames.find(name => {
+      const n = normalizeApo(stripAcc(nfc(name)).toLowerCase());
+      if (sigle  && normalizeApo(stripAcc(nfc(sigle)).toLowerCase())  === n) return true;
+      if (raison && normalizeApo(stripAcc(nfc(raison)).toLowerCase()) === n) return true;
+      return false;
     });
+    if (!matched) continue;
+    if (!result[matched]) result[matched] = [];
+    if (result[matched].length >= 20) continue;
+    result[matched].push(_accountToRecord(account));
   }
   return result;
 }
@@ -135,30 +153,36 @@ router.post('/', async (req, res) => {
     ...organizations.map(name => ({ text: name, type: 'organization' })),
   ];
 
-  // 2. Recherches SOSL en parallèle (contacts + accounts)
-  const [contactsResult, accountsResult] = await Promise.allSettled([
-    persons.length > 0
-      ? soslSearch(buildContactSosl(persons))
-      : Promise.resolve([]),
-    organizations.length > 0
-      ? soslSearch(buildAccountSosl(organizations))
-      : Promise.resolve([]),
-  ]);
+  // 2. Recherche SF : une seule requête SOSL IN ALL FIELDS (Contact + Account)
+  let sfContacts = [], sfAccounts = [];
+  if (persons.length > 0 || organizations.length > 0) {
+    try {
+      const sosl = buildCombinedSosl(persons, organizations);
+      console.log('[entity-highlighter] SOSL query:', sosl);
+      const records = await soslSearch(sosl);
+      sfContacts = records.filter(r => r.attributes?.type === 'Contact');
+      sfAccounts = records.filter(r => r.attributes?.type === 'Account');
+      console.log('[entity-highlighter] contacts:', sfContacts.length, '| accounts:', sfAccounts.length, sfAccounts.map(a => a.Name));
+    } catch (err) {
+      console.error('[entity-highlighter] SOSL error:', err.message);
+    }
+  }
 
-  const sfContacts = contactsResult.status === 'fulfilled' ? contactsResult.value : [];
-  const sfAccounts = accountsResult.status === 'fulfilled' ? accountsResult.value : [];
+  // 3. Mapping Name (mapAccounts) + Sigle/Raison_sociale (mapAccountsAlt), dédup par Id
+  const salesforce = mapContacts(sfContacts, persons);
+  const mapByName  = mapAccounts(sfAccounts, organizations);
+  const mapByAlt   = mapAccountsAlt(sfAccounts, organizations);
 
-  if (contactsResult.status === 'rejected')
-    console.error('[entity-highlighter] SOSL contacts error:', contactsResult.reason?.message);
-  if (accountsResult.status === 'rejected')
-    console.error('[entity-highlighter] SOSL accounts error:', accountsResult.reason?.message);
-
-  console.log('[entity-highlighter] orgs cherchées:', organizations);
-  console.log('[entity-highlighter] sfAccounts bruts (count):', sfAccounts.length, sfAccounts.map(a => a.Name));
-
-  // 3. Mapping des résultats SF
-  const salesforce        = mapContacts(sfContacts, persons);
-  const salesforceAccounts = mapAccounts(sfAccounts, organizations);
+  const salesforceAccounts = {};
+  const allOrgNames = new Set([...Object.keys(mapByName), ...Object.keys(mapByAlt)]);
+  for (const orgName of allOrgNames) {
+    const list = [...(mapByName[orgName] || [])];
+    const seen = new Set(list.map(a => a.id));
+    for (const a of mapByAlt[orgName] || []) {
+      if (!seen.has(a.id)) { seen.add(a.id); list.push(a); }
+    }
+    salesforceAccounts[orgName] = list;
+  }
 
   return res.json({
     success: true,

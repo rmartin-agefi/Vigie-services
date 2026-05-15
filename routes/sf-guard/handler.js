@@ -5,7 +5,7 @@ const router = Router();
 
 const SF_BASE              = 'https://agefi.lightning.force.com';
 const GUARD_CONTACT_FIELDS = 'Id, FirstName, LastName, Name, Titre_exact_op__c, Fonction_Niveau_1__c, Email, Account.Name, lien_linkedin_indiv__c';
-const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website';
+const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website, Sigle__c, Raison_sociale__c';
 const CONTACT_LIMIT = 50;
 const ACCOUNT_LIMIT = 15;
 
@@ -126,13 +126,15 @@ router.post('/search', async (req, res) => {
 
   try {
     let sosl;
+    // IN ALL FIELDS : couvre Name ET Sigle__c / Raison_sociale__c en 1 requête
     if (type === 'person') {
       sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`;
     } else {
-      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
+      sosl = `FIND {${soslTokens}} IN ALL FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
     }
     console.log('[sf-guard] SOSL:', sosl);
     const rawRecords = await soslSearch(sosl);
+
     console.log('[sf-guard] rawRecords:', rawRecords.length, '→', rawRecords.map(r => r.Name || `${r.FirstName} ${r.LastName}`).join(' | '));
 
     const candidates = [];
@@ -141,8 +143,18 @@ router.post('/search', async (req, res) => {
       const sfType           = r.attributes?.type || 'Contact';
       const candidateName    = r.Name || `${r.FirstName || ''} ${r.LastName || ''}`.trim();
       const candidateCompany = sfType === 'Lead' ? (r.Company || '') : (r.Account?.Name || '');
-      const nameScore        = scoreName(candidateName, name);
-      const companyScore     = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
+
+      let nameScore = scoreName(candidateName, name);
+      if (type !== 'person' && nameScore < 50) {
+        // Tente un match exact sur Sigle__c ou Raison_sociale__c
+        const normName = normalize(name);
+        const sigleMatch  = r.Sigle__c           && normalize(r.Sigle__c)           === normName;
+        const raisonMatch = r.Raison_sociale__c  && normalize(r.Raison_sociale__c)  === normName;
+        if (sigleMatch)  nameScore = 95;
+        else if (raisonMatch) nameScore = 80;
+      }
+
+      const companyScore = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
       // Entreprise = bonus uniquement (jamais une pénalité si absente ou mauvaise)
       // nameScore est la base, companyScore peut ajouter jusqu'à 15 pts
       const companyBonus = type === 'person' && companyScore > 0 ? Math.round(companyScore * 0.15) : 0;
