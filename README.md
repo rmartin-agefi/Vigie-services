@@ -11,8 +11,7 @@ Remplace les 8 webhooks n8n par un service Express.js unifié, déployé sur Goo
 | `GET /webhook/surfe-search` | Enrichissement email via Surfe (async polling) |
 | `POST /webhook/check-position` | Vérifie la cohérence poste LinkedIn ↔ Salesforce via GPT-4.1-mini |
 | `POST /webhook/linkedin-summary` | Génère une fiche synthétique d'un profil LinkedIn via GPT-4o-mini |
-| `GET /webhook/salesforce-search` | Recherche un contact Salesforce par nom (SOQL) |
-| `GET /webhook/salesforce-search-link` | Recherche un contact Salesforce par URL LinkedIn (SOQL) |
+| `GET /webhook/salesforce-search` | Recherche un contact Salesforce par nom + URL LinkedIn (SOSL + SOQL en parallèle) |
 | `POST /webhook/entity-highlighter` | Extrait les entités d'un texte (GPT-4.1-mini) et les recherche dans Salesforce (SOSL) |
 | `GET /webhook/piano-check-agefi` | Vérifie les abonnements Piano d'un email sur L'Agefi |
 | `GET /webhook/piano-check-opinion` | Vérifie les abonnements Piano d'un email sur L'Opinion |

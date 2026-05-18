@@ -124,7 +124,6 @@ Variables ClickUp pour le bug reporter :
 | `/webhook/check-position` | ✅ OK | `linkedin` | `linkedin/injector.js` |
 | `/webhook/linkedin-summary` | ✅ OK | `linkedin` | `linkedin/content.js` |
 | `/webhook/salesforce-search` | ✅ OK | `linkedin` | `linkedin/api.js` |
-| `/webhook/salesforce-search-link` | ✅ OK | `linkedin` | `linkedin/api.js` |
 | `/webhook/entity-highlighter` | ✅ OK | `eh` **ou** `alpha` | `entity-highlighter/api.js`, `alpha-reader/viewer.js` |
 | `/webhook/piano-check-agefi` | ✅ OK | `linkedin` | `linkedin/api.js` |
 | `/webhook/piano-check-opinion` | ✅ OK | `linkedin` | `linkedin/api.js` |
