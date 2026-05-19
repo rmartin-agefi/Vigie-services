@@ -23,10 +23,10 @@ function toSoslTokens(name) {
 // Contact + Account dans le même FIND — séparation faite côté mapping (persons vs organizations)
 function buildCombinedSosl(persons, organizations) {
   const terms = [
-    ...persons.slice(0, 15).map(name => escapeSosl(toSoslTokens(name))),
+    ...persons.map(name => escapeSosl(toSoslTokens(name))),
     ...organizations.slice(0, 15).map(name => escapeSosl(toSoslTokens(name))),
   ].filter(Boolean).join(' OR ');
-  return `FIND {${terms}} IN ALL FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS} LIMIT 50), Account(${ACCOUNT_SOSL_FIELDS} LIMIT 200)`;
+  return `FIND {${terms}} IN ALL FIELDS RETURNING Contact(${CONTACT_SOSL_FIELDS} LIMIT 200), Account(${ACCOUNT_SOSL_FIELDS} LIMIT 200)`;
 }
 
 function mapContacts(sfContacts, personNames) {
