@@ -1,6 +1,6 @@
 # influence-services
 
-Backend Cloud Run de l'extension Chrome **Influence** (BeyMédias).
+Backend Cloud Run de l'extension Chrome **Influence**.
 
 Remplace les 8 webhooks n8n par un service Express.js unifié, déployé sur Google Cloud Run. Chaque route est isolée dans son propre dossier et montée automatiquement au démarrage.
 
