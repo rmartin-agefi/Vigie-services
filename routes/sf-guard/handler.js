@@ -6,12 +6,12 @@ const router = Router();
 const SF_BASE              = 'https://agefi.lightning.force.com';
 const GUARD_CONTACT_FIELDS = 'Id, FirstName, LastName, Name, Titre_exact_op__c, Fonction_Niveau_1__c, Email, Account.Name, lien_linkedin_indiv__c';
 const GUARD_ACCOUNT_FIELDS = 'Id, Name, Industry, Website, Sigle__c, Raison_sociale__c';
-const CONTACT_LIMIT = 50;
+const CONTACT_LIMIT = 200;
 const ACCOUNT_LIMIT = 15;
 
 // ── Normalisation ─────────────────────────────────────────────
 
-const FR_PARTICLES = new Set(['de', 'du', 'des', 'le', 'la', 'les', 'd', 'l', 'et', 'en', 'von', 'van', 'ter', 'den']);
+const FR_PARTICLES = new Set(['de', 'du', 'des', 'd', 'l', 'von', 'van', 'ter', 'den', 'zum', 'zu', 'af', 'di', 'del', 'della', 'dos', 'da']);
 
 function normalize(s) {
   return String(s || '')
@@ -42,13 +42,17 @@ function significantTokens(name) {
 function toSoslTokens(name, type) {
   const tokens = significantTokens(name);
   if (!tokens.length) return '';
-  // Pour les personnes : chercher uniquement par le dernier token (nom de famille, plus distinctif)
-  // Les prénoms (Jean, Marie, Pierre...) sont trop communs → trop de bruit si inclus dans SOSL
-  // Le scoring Levenshtein filtre ensuite sur le nom complet
-  if (type === 'person' && tokens.length >= 2) {
-    return tokens[tokens.length - 1];
+  // Pour les personnes : requête principale avec AND (raphael AND martin) → précis
+  // Fallback sur dernier token seul géré dans le handler si 0 résultats
+  if (type === 'person') {
+    return tokens.length >= 2 ? tokens.join(' AND ') : tokens[0];
   }
   return tokens.join(' OR ');
+}
+
+function toSoslFallbackToken(name) {
+  const tokens = significantTokens(name);
+  return tokens.length ? tokens[tokens.length - 1] : '';
 }
 
 // ── Scoring ───────────────────────────────────────────────────
@@ -133,7 +137,17 @@ router.post('/search', async (req, res) => {
       sosl = `FIND {${soslTokens}} IN ALL FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
     }
     console.log('[sf-guard] SOSL:', sosl);
-    const rawRecords = await soslSearch(sosl);
+    let rawRecords = await soslSearch(sosl);
+
+    // Fallback pour les personnes : si AND ne donne rien, tente avec le seul nom de famille
+    if (type === 'person' && rawRecords.length === 0) {
+      const fallbackToken = toSoslFallbackToken(name);
+      if (fallbackToken && fallbackToken !== soslTokens) {
+        const fallbackSosl = `FIND {${fallbackToken}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`;
+        console.log('[sf-guard] Fallback SOSL:', fallbackSosl);
+        rawRecords = await soslSearch(fallbackSosl);
+      }
+    }
 
     console.log('[sf-guard] rawRecords:', rawRecords.length, '→', rawRecords.map(r => r.Name || `${r.FirstName} ${r.LastName}`).join(' | '));
 
