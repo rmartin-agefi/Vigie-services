@@ -10,14 +10,23 @@ const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership
 
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Remplace toute apostrophe (0x27, 0x2018, 0x2019, 0x02BC) par un espace
+function _stripApos(s) {
+  let r = ‘’;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    r += (c === 0x27 || c === 0x2018 || c === 0x2019 || c === 0x02BC) ? ‘ ‘ : s[i];
+  }
+  return r;
+}
+
 // Normalise espaces autour des apostrophes : "d’ Hauteville" → "d Hauteville"
-// Gère U+0027 (ASCII), U+2018/U+2019 (curly LLM), U+02BC (modifier)
-const normalizeApo = s => s.replace(/\s*[‘‘’ʼ]\s*/g, ‘ ‘).replace(/\s+/g, ‘ ‘).trim();
+const normalizeApo = s => _stripApos(s).replace(/\s+/g, ‘ ‘).trim();
 
 // Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
 // Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)
 function toSoslTokens(name) {
-  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ‘ ‘).replace(/[‘‘’ʼ]/g, ‘ ‘).replace(/\s+/g, ‘ ‘).trim();
+  return stripAcc(nfc(_stripApos(name))).toLowerCase().replace(/-/g, ‘ ‘).replace(/\s+/g, ‘ ‘).trim();
 }
 
 // Une seule requête SOSL IN ALL FIELDS : couvre Name, Sigle__c, Raison_sociale__c
