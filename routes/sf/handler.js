@@ -22,15 +22,33 @@ const ACCOUNT_FETCH_FIELDS = [
   'R_f_ren_commercial_abonnements__c', 'R_f_ren_commercial_abonnements__r.Name',
 ].join(', ');
 
-// GET /webhook/sf/accounts?q=...&limit=15 — autocomplete comptes
+// GET /webhook/sf/accounts?q=...&limit=15&includeEtats=1,9&includeOther=1 — autocomplete comptes
 router.get('/accounts', async (req, res) => {
   const q     = (req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 15, 1), 200);
   if (q.length < 2) return res.json([]);
 
+  // Filtrage optionnel par etat (demandé quand tous les filtres ne sont pas actifs)
+  const KNOWN_ETATS  = ['1', '9', '7'];
+  const includeEtats = (req.query.includeEtats || '').split(',').map(e => e.trim()).filter(e => KNOWN_ETATS.includes(e));
+  const includeOther = req.query.includeOther === '1';
+  // Si aucun param n'est fourni → pas de filtre (comportement par défaut, tous les etats)
+  const hasFilter    = req.query.includeEtats !== undefined || req.query.includeOther !== undefined;
+
+  if (hasFilter && !includeEtats.length && !includeOther) return res.json([]);
+
+  let etatWhere = '';
+  if (hasFilter) {
+    const parts = [];
+    if (includeEtats.length) parts.push(`Etat__c IN (${includeEtats.map(e => `'${e}'`).join(',')})`);
+    if (includeOther)         parts.push(`Etat__c NOT IN ('1','9','7')`);
+    if (parts.length === 1)   etatWhere = ` WHERE ${parts[0]}`;
+    else if (parts.length > 1) etatWhere = ` WHERE (${parts.join(' OR ')})`;
+  }
+
   const normalized = q.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const term = escapeSosl(normalized);
-  const sosl = `FIND {${term}*} IN NAME FIELDS RETURNING Account(Id, Name, ParentId, Parent.Name, Etat__c LIMIT ${limit})`;
+  const sosl = `FIND {${term}*} IN NAME FIELDS RETURNING Account(Id, Name, ParentId, Parent.Name, Etat__c${etatWhere} LIMIT ${limit})`;
 
   try {
     const records = await soslSearch(sosl);
