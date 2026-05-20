@@ -39,20 +39,19 @@ function significantTokens(name) {
     .filter(t => t.length > 0 && !FR_PARTICLES.has(t));
 }
 
-function toSoslTokens(name, type) {
+function toSoslTokens(name) {
   const tokens = significantTokens(name);
   if (!tokens.length) return '';
-  // Pour les personnes : requête principale avec AND (raphael AND martin) → précis
-  // Fallback sur dernier token seul géré dans le handler si 0 résultats
-  if (type === 'person') {
-    return tokens.length >= 2 ? tokens.join(' AND ') : tokens[0];
-  }
-  return tokens.join(' OR ');
+  // Requête principale AND pour contacts et comptes : précis, réduit les faux positifs
+  // Si best score < 70 après scoring → fallback géré dans le handler
+  return tokens.length >= 2 ? tokens.join(' AND ') : tokens[0];
 }
 
-function toSoslFallbackToken(name) {
+function toSoslFallbackTokens(name, type) {
   const tokens = significantTokens(name);
-  return tokens.length ? tokens[tokens.length - 1] : '';
+  if (!tokens.length) return '';
+  if (type === 'person') return tokens[tokens.length - 1]; // nom de famille seul
+  return tokens.join(' OR ');                              // OR pour les comptes
 }
 
 // ── Scoring ───────────────────────────────────────────────────
@@ -119,85 +118,92 @@ function buildReasons(nameScore, companyScore) {
   return r;
 }
 
+// ── Scoring des enregistrements bruts ─────────────────────────
+
+function scoreRecords(rawRecords, type, name, detectedCompanies) {
+  const minScore = type === 'person' ? 45 : 30;
+  const result   = [];
+  for (const r of rawRecords) {
+    const sfType           = r.attributes?.type || 'Contact';
+    const candidateName    = r.Name || `${r.FirstName || ''} ${r.LastName || ''}`.trim();
+    const candidateCompany = sfType === 'Lead' ? (r.Company || '') : (r.Account?.Name || '');
+
+    let nameScore = scoreName(candidateName, name);
+    if (type !== 'person' && nameScore < 50) {
+      const normName    = normalize(name);
+      const sigleMatch  = r.Sigle__c          && normalize(r.Sigle__c)          === normName;
+      const raisonMatch = r.Raison_sociale__c && normalize(r.Raison_sociale__c) === normName;
+      if (sigleMatch)       nameScore = 95;
+      else if (raisonMatch) nameScore = 80;
+    }
+
+    const companyScore = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
+    const companyBonus = type === 'person' && companyScore > 0 ? Math.round(companyScore * 0.15) : 0;
+    const score        = type !== 'person' ? nameScore : Math.min(100, nameScore + companyBonus);
+
+    if (score < minScore) continue;
+
+    result.push({
+      salesforceId:  r.Id,
+      type:          sfType,
+      name:          candidateName,
+      firstName:     r.FirstName  || '',
+      lastName:      r.LastName   || '',
+      title:         r.Titre_exact_op__c || r.Fonction_Niveau_1__c || r.Title || '',
+      company:       candidateCompany,
+      email:         r.Email || null,
+      score,
+      reasons:       buildReasons(nameScore, companyScore),
+      salesforceUrl: `${SF_BASE}/lightning/r/${sfType}/${r.Id}/view`,
+    });
+  }
+  return result;
+}
+
 // ── Handler ───────────────────────────────────────────────────
 
 router.post('/search', async (req, res) => {
   const { type, name, detectedCompanies = [] } = req.body;
   if (!name) return res.status(400).json({ error: 'name requis' });
 
-  const soslTokens = toSoslTokens(name, type);
+  const soslTokens = toSoslTokens(name);
   if (!soslTokens) return res.status(400).json({ error: 'Nom invalide' });
 
   try {
-    let sosl;
-    // IN ALL FIELDS : couvre Name ET Sigle__c / Raison_sociale__c en 1 requête
-    if (type === 'person') {
-      sosl = `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`;
-    } else {
-      sosl = `FIND {${soslTokens}} IN ALL FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
-    }
-    console.log('[sf-guard] SOSL:', sosl);
-    let rawRecords = await soslSearch(sosl);
+    const primarySosl = type === 'person'
+      ? `FIND {${soslTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`
+      : `FIND {${soslTokens}} IN ALL FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
+    console.log('[sf-guard] SOSL primary:', primarySosl);
 
-    // Fallback pour les personnes : si AND ne donne rien, tente avec le seul nom de famille
-    if (type === 'person' && rawRecords.length === 0) {
-      const fallbackToken = toSoslFallbackToken(name);
-      if (fallbackToken && fallbackToken !== soslTokens) {
-        const fallbackSosl = `FIND {${fallbackToken}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`;
-        console.log('[sf-guard] Fallback SOSL:', fallbackSosl);
-        rawRecords = await soslSearch(fallbackSosl);
-      }
-    }
+    const primaryRaw = await soslSearch(primarySosl);
+    console.log('[sf-guard] primary:', primaryRaw.length, '→', primaryRaw.map(r => r.Name || `${r.FirstName} ${r.LastName}`).join(' | '));
 
-    console.log('[sf-guard] rawRecords:', rawRecords.length, '→', rawRecords.map(r => r.Name || `${r.FirstName} ${r.LastName}`).join(' | '));
-
-    const candidates = [];
-
-    for (const r of rawRecords) {
-      const sfType           = r.attributes?.type || 'Contact';
-      const candidateName    = r.Name || `${r.FirstName || ''} ${r.LastName || ''}`.trim();
-      const candidateCompany = sfType === 'Lead' ? (r.Company || '') : (r.Account?.Name || '');
-
-      let nameScore = scoreName(candidateName, name);
-      if (type !== 'person' && nameScore < 50) {
-        // Tente un match exact sur Sigle__c ou Raison_sociale__c
-        const normName = normalize(name);
-        const sigleMatch  = r.Sigle__c           && normalize(r.Sigle__c)           === normName;
-        const raisonMatch = r.Raison_sociale__c  && normalize(r.Raison_sociale__c)  === normName;
-        if (sigleMatch)  nameScore = 95;
-        else if (raisonMatch) nameScore = 80;
-      }
-
-      const companyScore = type === 'person' ? scoreCompany(candidateCompany, detectedCompanies) : 0;
-      // Entreprise = bonus uniquement (jamais une pénalité si absente ou mauvaise)
-      // nameScore est la base, companyScore peut ajouter jusqu'à 15 pts
-      const companyBonus = type === 'person' && companyScore > 0 ? Math.round(companyScore * 0.15) : 0;
-      const score = type !== 'person' ? nameScore : Math.min(100, nameScore + companyBonus);
-
-      const minScore = type === 'person' ? 45 : 30;
-      if (score < minScore) continue;
-
-      candidates.push({
-        salesforceId:  r.Id,
-        type:          sfType,
-        name:          candidateName,
-        firstName:     r.FirstName  || '',
-        lastName:      r.LastName   || '',
-        title:         r.Titre_exact_op__c || r.Fonction_Niveau_1__c || r.Title || '',
-        company:       candidateCompany,
-        email:         r.Email || null,
-        score,
-        reasons:       buildReasons(nameScore, companyScore),
-        salesforceUrl: `${SF_BASE}/lightning/r/${sfType}/${r.Id}/view`,
-      });
-    }
-
+    let candidates = scoreRecords(primaryRaw, type, name, detectedCompanies);
     candidates.sort((a, b) => b.score - a.score);
+
+    // Fallback si aucun candidat avec score ≥ 70 : requête plus large, merge dédupliqué
+    const primaryBest = candidates[0]?.score ?? 0;
+    if (primaryBest < 70) {
+      const fallbackTokens = toSoslFallbackTokens(name, type);
+      if (fallbackTokens && fallbackTokens !== soslTokens) {
+        const fallbackSosl = type === 'person'
+          ? `FIND {${fallbackTokens}} IN NAME FIELDS RETURNING Contact(${GUARD_CONTACT_FIELDS} LIMIT ${CONTACT_LIMIT})`
+          : `FIND {${fallbackTokens}} IN ALL FIELDS RETURNING Account(${GUARD_ACCOUNT_FIELDS} LIMIT ${ACCOUNT_LIMIT})`;
+        console.log('[sf-guard] Fallback SOSL:', fallbackSosl);
+        const fallbackRaw = await soslSearch(fallbackSosl);
+        const seenIds     = new Set(candidates.map(c => c.salesforceId));
+        const extra       = scoreRecords(fallbackRaw, type, name, detectedCompanies)
+          .filter(c => !seenIds.has(c.salesforceId));
+        candidates = [...candidates, ...extra];
+        candidates.sort((a, b) => b.score - a.score);
+      }
+    }
+
     const top    = candidates.slice(0, 8);
     const best   = top[0]?.score ?? 0;
     const status = best >= 85 ? 'match_strong' : best >= 50 ? 'match_possible' : 'no_match';
 
-    console.log(`[sf-guard] ${type} "${name}" → ${status} (${top.length} candidats)`);
+    console.log(`[sf-guard] ${type} "${name}" → ${status} (best=${best}, primaryBest=${primaryBest}, total=${candidates.length})`);
 
     return res.json({
       requestId:   `sfguard_${Date.now()}`,
