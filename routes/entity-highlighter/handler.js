@@ -10,13 +10,14 @@ const ACCOUNT_SOSL_FIELDS = 'Id, Name, Website, Industry, Description, Ownership
 
 const nfc          = s => s.normalize('NFC');
 const stripAcc     = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-// Normalise espaces autour des apostrophes : "d' Hauteville" → "d Hauteville"
-const normalizeApo = s => s.replace(/\s*['']\s*/g, ' ').replace(/\s+/g, ' ').trim();
+// Normalise espaces autour des apostrophes : "d’ Hauteville" → "d Hauteville"
+// Gère U+0027 (ASCII), U+2018/U+2019 (curly LLM), U+02BC (modifier)
+const normalizeApo = s => s.replace(/\s*[‘‘’ʼ]\s*/g, ‘ ‘).replace(/\s+/g, ‘ ‘).trim();
 
 // Unquoted SOSL token search: accent-strip + lowercase + hyphens→spaces
 // Résout les noms accentués (ë, é, ...) et composés (Ziouar-Cornec)
 function toSoslTokens(name) {
-  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ' ').replace(/['']/g, ' ').replace(/\s+/g, ' ').trim();
+  return stripAcc(nfc(name)).toLowerCase().replace(/-/g, ‘ ‘).replace(/[‘‘’ʼ]/g, ‘ ‘).replace(/\s+/g, ‘ ‘).trim();
 }
 
 // Une seule requête SOSL IN ALL FIELDS : couvre Name, Sigle__c, Raison_sociale__c
